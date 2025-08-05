@@ -1,0 +1,3 @@
+[submodule "FileChecker"]
+	path = FileChecker
+	url = https://github.com/Safeturned/FileChecker.git
