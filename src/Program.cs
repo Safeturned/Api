@@ -21,6 +21,8 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
 var config = builder.Configuration;
 var host = builder.Host;
 var services = builder.Services;
@@ -34,19 +36,13 @@ var loggerFactory = new ServiceCollection()
     .GetRequiredService<ILoggerFactory>();
 #pragma warning restore ASP0000
 
-void PrepareDatabase()
-{
-    var hangfireConnection = config.GetRequiredConnectionString("HangfireConnection");
-    var filesConnection = config.GetRequiredConnectionString("FilesConnection");
+var connectionString = config.GetRequiredConnectionString("safeturned-db");
 
-    var dbPrepare = new DatabasePreparator(loggerFactory);
-    dbPrepare
-        .Add("Hangfire", hangfireConnection, DbPrepareType.PostgreSql, true)
-        .Add("Files", filesConnection, DbPrepareType.PostgreSql, true, DbReference.Filter)
-        .Prepare();
-}
-
-PrepareDatabase();
+var dbPrepare = new DatabasePreparator(loggerFactory);
+dbPrepare
+    .Add("Hangfire", connectionString, DbPrepareType.PostgreSql, true)
+    .Add("Files", connectionString, DbPrepareType.PostgreSql, true, DbReference.Filter)
+    .Prepare();
 
 host.UseDefaultServiceProvider((_, options) =>
 {
@@ -118,6 +114,8 @@ services.AddHttpContextAccessor();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 var app = builder.Build();
+
+app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
