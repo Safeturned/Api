@@ -5,17 +5,28 @@ EXPOSE 8080
 EXPOSE 8081
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Safeturned.Api.csproj", "./"]
-RUN dotnet restore "Safeturned.Api.csproj"
+
+# Install git for submodule operations
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# Copy the entire solution including .git directory for submodule access
 COPY . .
-WORKDIR "/src/"
-RUN dotnet build "./Safeturned.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+# Initialize and update submodules
+RUN git submodule update --init --recursive
+
+# Copy project file and restore dependencies
+COPY ["src/Safeturned.Api.csproj", "src/"]
+RUN dotnet restore "src/Safeturned.Api.csproj"
+
+# Copy the rest of the source code
+COPY . .
+WORKDIR "/src/src"
+RUN dotnet build "Safeturned.Api.csproj" -c Release -o /app/build
 
 FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./Safeturned.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "Safeturned.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
