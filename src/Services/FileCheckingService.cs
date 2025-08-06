@@ -8,8 +8,8 @@ using DI.Services.Scheme.Read;
 using DI.Services.Scheme.Read.Abstraction;
 using DI.Services.Scheme.Read.Validation;
 using ST.CheckingProcessor.Abstraction;
-using ST.Initializatializing.Abstraction;
 using System.Reflection;
+using ST.Initializing.Abstraction;
 
 namespace Safeturned.Api.Services;
 
@@ -23,7 +23,7 @@ public class FileCheckingService : IFileCheckingService
     {
         _logger = logger;
         _serviceProvider = CreateServiceProvider();
-        _moduleCheckingProcessor = _serviceProvider.ResolveService<IModuleCheckingProcessor>();
+        _moduleCheckingProcessor = _serviceProvider.ResolveService<IModuleCheckingProcessor>() as IModuleCheckingProcessor;
         
         // Initialize all ST services
         InitializeServices();

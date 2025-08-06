@@ -1,0 +1,40 @@
+root = true
+
+[*]
+trim_trailing_whitespace = true
+csharp_using_directive_placement = outside_namespace:silent
+csharp_style_namespace_declarations = file_scoped:silent
+
+[*.{yaml,yml}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+[*.module]
+indent_size = 2
+indent_style = space
+
+[*.csproj]
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+# C# files
+[*.cs]
+
+#### Core EditorConfig Options ####
+
+# Indentation and spacing
+indent_size = 4
+indent_style = space
+tab_width = 4
+
+# New line preferences
+insert_final_newline = false
+
+# https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/style-rules/ide0290
+csharp_style_prefer_primary_constructors = false
+dotnet_diagnostic.IDE0290.severity = none
+
+# https://www.jetbrains.com/help/rider/ConvertToPrimaryConstructor.html
+resharper_convert_to_primary_constructor_highlighting = none 
