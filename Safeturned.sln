@@ -29,6 +29,16 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Safeturned.AppHost", "Safet
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Safeturned.ServiceDefaults", "Safeturned.ServiceDefaults\Safeturned.ServiceDefaults.csproj", "{23C11A3F-0DBE-C9D0-2C04-79C3E0973E87}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ST.Checking.DnLib.Abstraction", "FileChecker\src\ST.Checking.DnLib.Abstraction\ST.Checking.DnLib.Abstraction.csproj", "{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "aspire", "aspire", "{BA48AF8D-478C-4839-9813-0478D4B57CF3}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{E7D43039-BD1E-4658-9FAC-4B7FB3533335}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{46C2EB6F-8D7F-49B7-8C5D-6DCD958EC510}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "FileChecker", "FileChecker", "{A9FCEE5D-A38D-4F0C-A4C5-14835557EC52}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -195,8 +205,25 @@ Global
 		{23C11A3F-0DBE-C9D0-2C04-79C3E0973E87}.Release|x64.Build.0 = Release|Any CPU
 		{23C11A3F-0DBE-C9D0-2C04-79C3E0973E87}.Release|x86.ActiveCfg = Release|Any CPU
 		{23C11A3F-0DBE-C9D0-2C04-79C3E0973E87}.Release|x86.Build.0 = Release|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Debug|x64.Build.0 = Debug|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Debug|x86.Build.0 = Debug|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Release|Any CPU.Build.0 = Release|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Release|x64.ActiveCfg = Release|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Release|x64.Build.0 = Release|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Release|x86.ActiveCfg = Release|Any CPU
+		{94E95104-3DBB-4CC0-89B2-9AC8B94DA110}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{37BFD75F-315F-41C8-BAC5-D3FD6066062F} = {46C2EB6F-8D7F-49B7-8C5D-6DCD958EC510}
+		{F86F7308-9550-4FB4-9BB0-63F9740BBCD2} = {BA48AF8D-478C-4839-9813-0478D4B57CF3}
+		{23C11A3F-0DBE-C9D0-2C04-79C3E0973E87} = {BA48AF8D-478C-4839-9813-0478D4B57CF3}
 	EndGlobalSection
 EndGlobal
