@@ -97,7 +97,7 @@ services.AddHangfire(x => x
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
     .UsePostgreSqlStorage(
-        xx => xx.UseNpgsqlConnection(config.GetRequiredConnectionString("HangfireConnection")), new PostgreSqlStorageOptions
+        xx => xx.UseNpgsqlConnection(config.GetRequiredConnectionString("safeturned-db")), new PostgreSqlStorageOptions
         {
             PrepareSchemaIfNecessary = true,
             InvisibilityTimeout = TimeSpan.FromHours(7),
@@ -144,11 +144,11 @@ recurringJobManager.AddOrUpdate<AnalyticsCacheUpdateJob>(
     job => job.UpdateAnalyticsCache(null!, CancellationToken.None),
     "*/5 * * * *");
 
-app.UseAuthentication();
+//app.UseAuthentication();
 app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error, more: https://github.com/dotnet/aspnetcore/issues/51888
 app.UseRouting();
 app.UseRateLimiter();
-app.UseAuthorization();
+//app.UseAuthorization();
 
 app.UseHangfireDashboard(config["Hangfire:DashboardPath"] ?? "/hangfire", new DashboardOptions
 {
