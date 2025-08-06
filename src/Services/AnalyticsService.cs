@@ -2,6 +2,7 @@ using Safeturned.Api.Database;
 using Safeturned.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Safeturned.Api.Database.Models;
 
 namespace Safeturned.Api.Services;
 
@@ -29,7 +30,7 @@ public class AnalyticsService : IAnalyticsService
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-            
+
             // Record scan metrics in a separate table
             var scanRecord = new ScanRecord
             {
@@ -39,13 +40,13 @@ public class AnalyticsService : IAnalyticsService
                 ScanTimeMs = (int)scanTime.TotalMilliseconds,
                 ScanDate = DateTime.UtcNow
             };
-            
-            filesDb.Set<ScanRecord>().Add(scanRecord);
+
+            await filesDb.Set<ScanRecord>().AddAsync(scanRecord);
             await filesDb.SaveChangesAsync();
-            
+
             // Invalidate cache to force refresh
             _cache.Remove(AnalyticsCacheKey);
-            
+
             _logger.LogInformation("Recorded scan: {FileName}, Score: {Score}, Threat: {IsThreat}, Time: {ScanTime}ms",
                 fileName, score, isThreat, scanTime.TotalMilliseconds);
         }
@@ -66,10 +67,10 @@ public class AnalyticsService : IAnalyticsService
 
         // Calculate fresh data for ALL TIME
         var data = await CalculateAnalyticsAsync();
-        
+
         // Cache the result
         _cache.Set(AnalyticsCacheKey, data, TimeSpan.FromMinutes(CacheExpirationMinutes));
-        
+
         return data;
     }
 
@@ -91,9 +92,9 @@ public class AnalyticsService : IAnalyticsService
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-            
+
             var query = filesDb.Set<ScanRecord>().AsQueryable();
-            
+
             if (from.HasValue)
                 query = query.Where(r => r.ScanDate >= from.Value);
             if (to.HasValue)
@@ -104,62 +105,36 @@ public class AnalyticsService : IAnalyticsService
                 LastUpdated = DateTime.UtcNow
             };
 
-            // Basic counts
             analytics.TotalFilesScanned = await query.CountAsync();
             analytics.TotalThreatsDetected = await query.Where(r => r.IsThreat).CountAsync();
             analytics.TotalSafeFiles = await query.Where(r => !r.IsThreat).CountAsync();
-            analytics.TotalMaliciousFiles = analytics.TotalThreatsDetected;
 
-            // Calculate threat detection rate
             if (analytics.TotalFilesScanned > 0)
             {
                 analytics.ThreatDetectionRate = (double)analytics.TotalThreatsDetected / analytics.TotalFilesScanned * 100;
                 analytics.DetectionAccuracy = analytics.ThreatDetectionRate; // For backward compatibility
             }
 
-            // Scan time statistics
             var avgScanTime = await query.AverageAsync(r => r.ScanTimeMs);
             analytics.AverageScanTimeMs = avgScanTime;
             analytics.TotalScanTimeMs = await query.SumAsync(r => r.ScanTimeMs);
 
-            // Average score
             var avgScore = await query.AverageAsync(r => r.Score);
             analytics.AverageScore = avgScore;
 
-            // Date range statistics
             if (analytics.TotalFilesScanned > 0)
             {
                 analytics.FirstScanDate = await query.MinAsync(r => r.ScanDate);
                 analytics.LastScanDate = await query.MaxAsync(r => r.ScanDate);
             }
 
-            // Threats by type (based on score ranges)
-            analytics.ThreatsByType = await query
-                .Where(r => r.IsThreat)
-                .GroupBy(r => GetThreatType(r.Score))
-                .ToDictionaryAsync(g => g.Key, g => g.Count());
-
-            // Scans by day (last 30 days for trending)
-            var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
-            analytics.ScansByDay = await query
-                .Where(r => r.ScanDate >= thirtyDaysAgo)
-                .GroupBy(r => r.ScanDate.Date)
-                .ToDictionaryAsync(g => g.Key.ToString("yyyy-MM-dd"), g => g.Count());
-
             return analytics;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to calculate analytics");
-            SentrySdk.CaptureException(ex, scope =>
-            {
-                scope.SetExtra("message", "Failed to calculate analytics");
-                scope.SetExtra("service", "AnalyticsService");
-                scope.SetExtra("operation", "CalculateAnalytics");
-                scope.SetTag("component", "Analytics");
-                scope.SetTag("operation", "calculate_analytics");
-            });
-            
+            SentrySdk.CaptureException(ex, scope => scope.SetExtra("message", "Failed to calculate analytics"));
+
             return new AnalyticsData { LastUpdated = DateTime.UtcNow };
         }
     }
@@ -176,14 +151,3 @@ public class AnalyticsService : IAnalyticsService
         };
     }
 }
-
-// Database model for scan records
-public class ScanRecord
-{
-    public int Id { get; set; }
-    public string FileName { get; set; } = string.Empty;
-    public float Score { get; set; }
-    public bool IsThreat { get; set; }
-    public int ScanTimeMs { get; set; }
-    public DateTime ScanDate { get; set; }
-} 

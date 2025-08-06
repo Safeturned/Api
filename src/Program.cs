@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Hangfire;
 using Hangfire.Console;
@@ -7,6 +8,7 @@ using Safeturned.Api;
 using Safeturned.Api.Database.Preparing;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Jobs;
+using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Scripts.Files;
 using Safeturned.Api.Services;
 using Serilog;
@@ -57,12 +59,24 @@ builder.WebHost.UseSentry(x =>
     x.AddExceptionFilterForType<OperationCanceledException>();
 });
 
+services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    /*options.AddPolicy(KnownRateLimitPolicies., httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.GetIPAddress(),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1)
+            }));*/
+});
+
 services.AddOpenApi();
 
-// Register FileChecker service
 services.AddScoped<IFileCheckingService, FileCheckingService>();
 
-// Register Analytics service
 services.AddMemoryCache();
 services.AddScoped<IAnalyticsService, AnalyticsService>();
 
@@ -93,6 +107,14 @@ services.AddHangfire(x => x
             InvisibilityTimeout = TimeSpan.FromHours(7),
         }));
 services.AddHangfireServer();
+
+services.ConfigureHttpClientDefaults(http =>
+{
+    http.AddStandardResilienceHandler();
+});
+
+services.AddHttpContextAccessor();
+
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 var app = builder.Build();
@@ -120,10 +142,9 @@ var serviceProvider = app.Services;
 var recurringJobManager = serviceProvider.GetRequiredService<IRecurringJobManager>();
 
 recurringJobManager.AddOrUpdate<AnalyticsCacheUpdateJob>(
-    "analytics-cache-update",
+    "analytics-cache",
     job => job.UpdateAnalyticsCache(null!, CancellationToken.None),
-    "*/5 * * * *" // every 5 minutes
-);
+    "*/5 * * * *");
 
 app.UseAuthentication();
 app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error, more: https://github.com/dotnet/aspnetcore/issues/51888

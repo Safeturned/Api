@@ -24,7 +24,7 @@ public class FileCheckingService : IFileCheckingService
         _logger = logger;
         _serviceProvider = CreateServiceProvider();
         _moduleCheckingProcessor = _serviceProvider.ResolveService<IModuleCheckingProcessor>() as IModuleCheckingProcessor;
-        
+
         // Initialize all ST services
         InitializeServices();
     }
@@ -34,15 +34,15 @@ public class FileCheckingService : IFileCheckingService
         try
         {
             _logger.LogInformation("Starting file check");
-            
+
             // Reset stream position to beginning
             fileStream.Position = 0;
-            
+
             var context = _moduleCheckingProcessor.Process(fileStream);
-            
-            _logger.LogInformation("File check completed. Score: {Score}, Checked: {Checked}", 
+
+            _logger.LogInformation("File check completed. Score: {Score}, Checked: {Checked}",
                 context.Score, context.Checked);
-            
+
             return context;
         }
         catch (Exception ex)
@@ -58,12 +58,12 @@ public class FileCheckingService : IFileCheckingService
         {
             // Reset stream position to beginning
             fileStream.Position = 0;
-            
+
             // Try to load the module to see if it's a valid .NET assembly
             using var memoryStream = new MemoryStream();
             await fileStream.CopyToAsync(memoryStream);
             memoryStream.Position = 0;
-            
+
             // Try to load with dnlib to validate it's a .NET assembly
             var module = dnlib.DotNet.ModuleDefMD.Load(memoryStream);
             return module != null;
@@ -79,7 +79,7 @@ public class FileCheckingService : IFileCheckingService
     private IDiServiceProvider CreateServiceProvider()
     {
         var reader = CreateReader();
-        
+
         // Load all ST assemblies
         var currentDir = Directory.GetCurrentDirectory();
         foreach (string file in Directory.GetFiles(currentDir, "ST.*.dll", SearchOption.TopDirectoryOnly))
@@ -94,10 +94,10 @@ public class FileCheckingService : IFileCheckingService
                 // Don't capture this in Sentry as it's a non-critical initialization issue
             }
         }
-        
+
         // Load the current assembly
         reader.Read(Assembly.GetExecutingAssembly());
-        
+
         return CreateProvider(reader);
     }
 
@@ -105,29 +105,22 @@ public class FileCheckingService : IFileCheckingService
     {
         try
         {
-            var services = _serviceProvider.ResolveServices<IStInitializable>(null, 
+            var services = _serviceProvider.ResolveServices<IStInitializable>(null,
                 DI.Services.Abstraction.EDiServiceEquals.SubClassOrAssignableOrEquals, true)
                 .Cast<IStInitializable>();
-                
+
             foreach (var initializable in services)
             {
                 initializable.Initialize();
             }
-            
+
             _logger.LogInformation("ST services initialized successfully");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to initialize ST services");
             // Capture this in Sentry as it's a critical initialization failure
-            SentrySdk.CaptureException(ex, scope =>
-            {
-                scope.SetExtra("message", "Failed to initialize ST services");
-                scope.SetExtra("service", "FileCheckingService");
-                scope.SetExtra("operation", "InitializeServices");
-                scope.SetTag("component", "FileChecker");
-                scope.SetTag("operation", "initialization");
-            });
+            SentrySdk.CaptureException(ex, scope => scope.SetExtra("message", "Failed to initialize ST services"));
         }
     }
 
@@ -144,4 +137,4 @@ public class FileCheckingService : IFileCheckingService
         var serviceFactory = new DiServiceFactory(engine);
         return new DiServiceProvider(serviceFactory, reader.EndRead());
     }
-} 
+}

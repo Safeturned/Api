@@ -1,15 +1,17 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
+using Safeturned.Api.Database.Models;
 using Safeturned.Api.Services;
 using Safeturned.Api.Models;
+using Safeturned.Api.RateLimiting;
 using ST.CheckingProcessor.Abstraction;
 
 namespace Safeturned.Api.Controllers;
 
 [ApiVersion("1.0")]
-[Route("api/v{version:apiVersion}/[controller]")]
 public class FilesController : ControllerBase
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
@@ -28,39 +30,39 @@ public class FilesController : ControllerBase
         _analyticsService = analyticsService;
         _logger = logger;
     }
-    
+
     [HttpPost]
     [RequestSizeLimit(1L * 1024 * 1024 * 1024)] // 1 GB
     public async Task<IActionResult> UploadFile(IFormFile file)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
-        
+
         try
         {
-            _logger.LogInformation("Processing uploaded file: {FileName}, Size: {Size} bytes", 
+            _logger.LogInformation("Processing uploaded file: {FileName}, Size: {Size} bytes",
                 file.FileName, file.Length);
-            
+
             var scanStartTime = DateTime.UtcNow;
-            
+
             // Check if the file can be processed by FileChecker
-            using var stream = file.OpenReadStream();
+            await using var stream = file.OpenReadStream();
             var canProcess = await _fileCheckingService.CanProcessFileAsync(stream);
-            
+
             if (!canProcess)
             {
                 _logger.LogWarning("File {FileName} is not a valid .NET assembly", file.FileName);
                 return BadRequest("File is not a valid .NET assembly that can be processed.");
             }
-            
+
             // Process the file with FileChecker
-            using var checkStream = file.OpenReadStream();
+            await using var checkStream = file.OpenReadStream();
             var processingContext = await _fileCheckingService.CheckFileAsync(checkStream);
-            
+
             // Save results to database
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-            
+
             var fileData = new FileData
             {
                 Hash = ComputeFileHash(file),
@@ -72,19 +74,19 @@ public class FilesController : ControllerBase
                 LastScanned = DateTime.UtcNow,
                 TimesScanned = 1
             };
-            
-            filesDb.Set<FileData>().Add(fileData);
+
+            await filesDb.Set<FileData>().AddAsync(fileData);
             await filesDb.SaveChangesAsync();
-            
+
             var scanTime = DateTime.UtcNow - scanStartTime;
             var isThreat = processingContext.Score >= 50; // Consider scores >= 50 as threats
-            
+
             // Record analytics
             await _analyticsService.RecordScanAsync(file.FileName, processingContext.Score, isThreat, scanTime);
-            
-            _logger.LogInformation("File {FileName} processed successfully. Score: {Score}, Time: {ScanTime}ms", 
+
+            _logger.LogInformation("File {FileName} processed successfully. Score: {Score}, Time: {ScanTime}ms",
                 file.FileName, processingContext.Score, scanTime.TotalMilliseconds);
-            
+
             var response = new FileCheckResponse
             {
                 FileName = file.FileName,
@@ -94,7 +96,7 @@ public class FilesController : ControllerBase
                 ProcessedAt = DateTime.UtcNow,
                 FileSizeBytes = file.Length
             };
-            
+
             return Ok(response);
         }
         catch (Exception ex)
@@ -103,7 +105,7 @@ public class FilesController : ControllerBase
             throw; // Let the GlobalExceptionHandler capture with Sentry
         }
     }
-    
+
     [HttpGet("{hash}")]
     public async Task<IActionResult> GetFileResult(string hash)
     {
@@ -111,13 +113,13 @@ public class FilesController : ControllerBase
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-            
+
             var fileData = await filesDb.Set<FileData>()
-                .FirstOrDefaultAsync(f => f.Hash == hash);
-            
+                .FirstOrDefaultAsync(x => x.Hash == hash);
+
             if (fileData == null)
                 return NotFound($"File with hash {hash} not found.");
-            
+
             var response = new FileCheckResponse
             {
                 FileName = fileData.FileName ?? "Unknown",
@@ -127,7 +129,7 @@ public class FilesController : ControllerBase
                 ProcessedAt = fileData.LastScanned,
                 FileSizeBytes = fileData.SizeBytes
             };
-            
+
             return Ok(response);
         }
         catch (Exception ex)
@@ -136,14 +138,14 @@ public class FilesController : ControllerBase
             throw; // Let the GlobalExceptionHandler capture with Sentry
         }
     }
-    
+
     [HttpGet("analytics")]
     public async Task<IActionResult> GetAnalytics([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         try
         {
             AnalyticsData analytics;
-            
+
             if (from.HasValue && to.HasValue)
             {
                 analytics = await _analyticsService.GetAnalyticsAsync(from.Value, to.Value);
@@ -152,7 +154,7 @@ public class FilesController : ControllerBase
             {
                 analytics = await _analyticsService.GetAnalyticsAsync();
             }
-            
+
             return Ok(analytics);
         }
         catch (Exception ex)
@@ -161,7 +163,7 @@ public class FilesController : ControllerBase
             throw; // Let the GlobalExceptionHandler capture with Sentry
         }
     }
-    
+
     private static string ComputeFileHash(IFormFile file)
     {
         using var sha256 = System.Security.Cryptography.SHA256.Create();
