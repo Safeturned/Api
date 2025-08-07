@@ -8,7 +8,6 @@ on:
   workflow_dispatch:
 
 env:
-  DOTNET_VERSION: '9.0.x'
   DOCKER_REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -29,8 +28,12 @@ jobs:
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
+      env:
+          DOTNET_NOLOGO: true
+          DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+          DOTNET_CLI_TELEMETRY_OPTOUT: true
       with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+        dotnet-version: 9.*
 
     - name: Setup Docker Buildx
       uses: docker/setup-buildx-action@v3
