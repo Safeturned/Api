@@ -11,6 +11,7 @@ using Safeturned.Api.Jobs;
 using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Scripts.Files;
 using Safeturned.Api.Services;
+using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Debugging;
 
@@ -120,6 +121,11 @@ app.MapDefaultEndpoints();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "OpenAPI V1");
+    });
 }
 
 app.UseHttpsRedirection();
