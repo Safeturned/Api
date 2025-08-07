@@ -11,7 +11,6 @@ using Safeturned.Api.Jobs;
 using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Scripts.Files;
 using Safeturned.Api.Services;
-using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Debugging;
 
