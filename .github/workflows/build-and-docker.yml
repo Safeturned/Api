@@ -50,7 +50,7 @@ jobs:
 
     - name: Publish with Aspire
       run: |
-        aspire publish --debug -o ./publish/aspire
+        aspire publish -o ./publish/aspire
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
