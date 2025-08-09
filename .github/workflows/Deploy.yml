@@ -168,6 +168,7 @@ jobs:
          EOF
         
          # Create deployment script
+         mkdir -p ./deploy
          cat > ./deploy/deploy.sh << 'EOF'
         #!/bin/bash
         set -e
