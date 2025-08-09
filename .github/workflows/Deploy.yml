@@ -220,6 +220,20 @@ jobs:
             echo "Files in /opt/safeturned/:"
             ls -la /opt/safeturned/ || echo "Directory is empty"
           fi
+          echo "=== Checking deploy subdirectory ==="
+          if [ -d "/opt/safeturned/deploy" ]; then
+            echo "✅ deploy directory exists"
+            echo "Files in deploy directory:"
+            ls -la /opt/safeturned/deploy/
+            if [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
+              echo "✅ deploy.sh exists in deploy directory"
+              ls -la /opt/safeturned/deploy/deploy.sh
+            else
+              echo "❌ deploy.sh does not exist in deploy directory"
+            fi
+          else
+            echo "❌ deploy directory does not exist"
+          fi
 
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
@@ -229,8 +243,28 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          cd /opt/safeturned/deploy
-          ./deploy.sh
+          echo "=== Starting deployment ==="
+          echo "Current directory: $(pwd)"
+          
+          # Check if we're in the right directory
+          if [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
+            echo "✅ Found deploy.sh in deploy directory"
+            cd /opt/safeturned/deploy
+            ./deploy.sh
+          elif [ -f "/opt/safeturned/deploy.sh" ]; then
+            echo "✅ Found deploy.sh in root directory"
+            cd /opt/safeturned
+            ./deploy.sh
+          else
+            echo "❌ deploy.sh not found"
+            echo "Available files:"
+            ls -la /opt/safeturned/
+            if [ -d "/opt/safeturned/deploy" ]; then
+              echo "Files in deploy directory:"
+              ls -la /opt/safeturned/deploy/
+            fi
+            exit 1
+          fi
 
     #- name: Create Release
     #  if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
