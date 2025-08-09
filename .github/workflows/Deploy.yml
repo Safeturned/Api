@@ -109,12 +109,6 @@ jobs:
             image: ghcr.io/safeturned/api:latest
             ports:
               - "8081:8081"  # Map host port to container port
-            healthcheck:
-              test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
-              interval: 30s
-              timeout: 10s
-              retries: 5
-              start_period: 120s
           
           nginx:
             image: nginx:alpine
