@@ -196,9 +196,7 @@ jobs:
         echo "Deployment completed successfully!"
         echo "API is available on port 8081 for Cloudflare Tunnel"
         EOF
-        
-        chmod +x ./deploy/deploy.sh
-        
+
         echo "Deployment package created in ./deploy/"
         echo "=== Debug: Listing deploy directory contents ==="
         ls -la ./deploy/
@@ -206,6 +204,8 @@ jobs:
         ls -la ./deploy/deploy.sh || echo "deploy.sh not found"
         echo "=== Debug: File contents of deploy.sh (first 10 lines) ==="
         head -10 ./deploy/deploy.sh || echo "Cannot read deploy.sh"
+        
+        chmod +x ./deploy/deploy.sh
 
     - name: Copy files to server
       uses: appleboy/scp-action@v1
