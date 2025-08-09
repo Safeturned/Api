@@ -140,26 +140,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseHangfireDashboard(options: new DashboardOptions
-{
-    Authorization =
-    [
-        new HangfireCustomBasicAuthenticationFilter
-        {
-            User = config["Hangfire:User"],
-            Pass = config["Hangfire:Password"],
-        }
-    ]
-});
-
-var serviceProvider = app.Services;
-var recurringJobManager = serviceProvider.GetRequiredService<IRecurringJobManager>();
-
-recurringJobManager.AddOrUpdate<AnalyticsCacheUpdateJob>(
-    "analytics-cache",
-    job => job.UpdateAnalyticsCache(null!, CancellationToken.None),
-    "*/5 * * * *");
-
 //app.UseAuthentication();
 app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error, more: https://github.com/dotnet/aspnetcore/issues/51888
 app.UseRouting();
@@ -179,5 +159,13 @@ app.UseHangfireDashboard(config["Hangfire:DashboardPath"] ?? "/hangfire", new Da
 });
 
 app.MapControllers();
+
+var serviceProvider = app.Services;
+var recurringJobManager = serviceProvider.GetRequiredService<IRecurringJobManager>();
+
+recurringJobManager.AddOrUpdate<AnalyticsCacheUpdateJob>(
+    "analytics-cache",
+    job => job.UpdateAnalyticsCache(null!, CancellationToken.None),
+    "*/5 * * * *");
 
 app.Run();
