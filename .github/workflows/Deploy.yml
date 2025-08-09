@@ -57,6 +57,29 @@ jobs:
         ls -la ./publish/aspire/
         echo "=== Docker compose content ==="
         cat ./publish/aspire/docker-compose.yaml
+        
+    - name: Tag and push Docker image
+      run: |
+        # Get the image name from docker-compose.yaml
+        IMAGE_NAME=$(grep "SAFETURNED_API_IMAGE" ./publish/aspire/docker-compose.yaml | head -1 | sed 's/.*SAFETURNED_API_IMAGE.*//' || echo "safeturned-api:latest")
+        
+        # Find the actual image that was built
+        BUILT_IMAGE=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep "safeturned-api" | head -1)
+        
+        if [ -n "$BUILT_IMAGE" ]; then
+          echo "Found built image: $BUILT_IMAGE"
+          
+          # Tag for registry
+          docker tag $BUILT_IMAGE ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          # Push to registry
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login ${{ env.DOCKER_REGISTRY }} -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          echo "Image pushed successfully"
+        else
+          echo "No built image found, skipping push"
+        fi
 
     - name: Create deployment package
       run: |
@@ -68,10 +91,11 @@ jobs:
         
         # No tar files from Aspire - it builds locally but doesn't export
         
-        # Create a simple override to expose the API port for Cloudflare Tunnel
+        # Create override to use registry image and expose port
         cat > ./deploy/docker-compose.override.yaml << 'EOF'
         services:
           safeturned-api:
+            image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ports:
               - "8080:${SAFETURNED_API_PORT:-80}"  # Expose for Cloudflare Tunnel
         EOF
@@ -96,8 +120,12 @@ jobs:
         # Stop existing containers
         docker compose down || true
         
-        # Start with Aspire's docker-compose (it handles building)
-        docker compose up -d --build
+        # Pull the latest image from registry
+        echo "Pulling latest image from registry..."
+        docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest || echo "Image pull failed, will build locally"
+        
+        # Start with Aspire's docker-compose
+        docker compose up -d
         
         # Wait for services to be healthy
         echo "Waiting for services to be healthy..."
