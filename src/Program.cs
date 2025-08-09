@@ -122,9 +122,6 @@ services.AddDbContext<FilesDbContext>(options =>
     options.UseNpgsql(dbConnectionString);
 });
 
-services.AddHealthChecks()
-    .AddNpgSql(dbConnectionString, name: "database");
-
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 var app = builder.Build();
