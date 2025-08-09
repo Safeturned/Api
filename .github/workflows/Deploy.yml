@@ -7,7 +7,7 @@ on:
 
 env:
   DOCKER_REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: safeturned/api
 
 jobs:
   deploy:
@@ -61,17 +61,17 @@ jobs:
     - name: Tag and push Docker image
       run: |
         BUILT_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep safeturned-api | head -n 1)
-    
+
         if [ -n "$BUILT_IMAGE" ]; then
           echo "Found built image: $BUILT_IMAGE"
-    
+
           # Login to GHCR with GITHUB_TOKEN
           echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-    
+
           # Tag and push
           docker tag "$BUILT_IMAGE" "ghcr.io/${{ github.repository }}:latest"
           docker push "ghcr.io/${{ github.repository }}:latest"
-    
+
           echo "✅ Image pushed successfully"
         else
           echo "❌ No built image found, skipping push"
