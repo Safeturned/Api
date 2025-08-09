@@ -104,7 +104,7 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
-                 # Create override to use registry image and expose port
+         # Create override to use registry image and expose port
          cat > ./deploy/docker-compose.override.yaml << 'EOF'
          services:
            safeturned-api:
