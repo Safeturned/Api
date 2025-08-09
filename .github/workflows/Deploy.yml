@@ -126,10 +126,10 @@ jobs:
              worker_connections 1024;
          }
          
-         http {
-             upstream safeturned_api {
-                 server safeturned-api:8081;
-             }
+                   http {
+              upstream safeturned_api {
+                  server safeturned-api:80;
+              }
              
              server {
                  listen 80;
