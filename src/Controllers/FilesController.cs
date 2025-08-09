@@ -8,6 +8,7 @@ using Safeturned.Api.Services;
 using Safeturned.Api.Models;
 using Safeturned.Api.RateLimiting;
 using ST.CheckingProcessor.Abstraction;
+using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Controllers;
 
@@ -17,18 +18,18 @@ public class FilesController : ControllerBase
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IFileCheckingService _fileCheckingService;
     private readonly IAnalyticsService _analyticsService;
-    private readonly ILogger<FilesController> _logger;
+    private readonly ILogger _logger;
 
     public FilesController(
         IServiceScopeFactory serviceScopeFactory,
         IFileCheckingService fileCheckingService,
         IAnalyticsService analyticsService,
-        ILogger<FilesController> logger)
+        ILogger logger)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _fileCheckingService = fileCheckingService;
         _analyticsService = analyticsService;
-        _logger = logger;
+        _logger = logger.ForContext<FilesController>();
     }
 
     [HttpPost]
@@ -40,7 +41,7 @@ public class FilesController : ControllerBase
 
         try
         {
-            _logger.LogInformation("Processing uploaded file: {FileName}, Size: {Size} bytes",
+            _logger.Information("Processing uploaded file: {FileName}, Size: {Size} bytes",
                 file.FileName, file.Length);
 
             var scanStartTime = DateTime.UtcNow;
@@ -51,7 +52,7 @@ public class FilesController : ControllerBase
 
             if (!canProcess)
             {
-                _logger.LogWarning("File {FileName} is not a valid .NET assembly", file.FileName);
+                _logger.Warning("File {FileName} is not a valid .NET assembly", file.FileName);
                 return BadRequest("File is not a valid .NET assembly that can be processed.");
             }
 
@@ -84,7 +85,7 @@ public class FilesController : ControllerBase
             // Record analytics
             await _analyticsService.RecordScanAsync(file.FileName, processingContext.Score, isThreat, scanTime);
 
-            _logger.LogInformation("File {FileName} processed successfully. Score: {Score}, Time: {ScanTime}ms",
+            _logger.Information("File {FileName} processed successfully. Score: {Score}, Time: {ScanTime}ms",
                 file.FileName, processingContext.Score, scanTime.TotalMilliseconds);
 
             var response = new FileCheckResponse
@@ -101,7 +102,7 @@ public class FilesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing file {FileName}", file.FileName);
+            _logger.Error(ex, "Error processing file {FileName}", file.FileName);
             throw; // Let the GlobalExceptionHandler capture with Sentry
         }
     }
@@ -134,7 +135,7 @@ public class FilesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving file result for hash {Hash}", hash);
+            _logger.Error(ex, "Error retrieving file result for hash {Hash}", hash);
             throw; // Let the GlobalExceptionHandler capture with Sentry
         }
     }
@@ -159,7 +160,7 @@ public class FilesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving analytics");
+            _logger.Error(ex, "Error retrieving analytics");
             throw; // Let the GlobalExceptionHandler capture with Sentry
         }
     }

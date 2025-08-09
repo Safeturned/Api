@@ -3,24 +3,25 @@ using Safeturned.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Safeturned.Api.Database.Models;
+using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Services;
 
 public class AnalyticsService : IAnalyticsService
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly ILogger<AnalyticsService> _logger;
+    private readonly ILogger _logger;
     private readonly IMemoryCache _cache;
     private const string AnalyticsCacheKey = "analytics_data";
     private const int CacheExpirationMinutes = 5;
 
     public AnalyticsService(
         IServiceScopeFactory serviceScopeFactory,
-        ILogger<AnalyticsService> logger,
+        ILogger logger,
         IMemoryCache cache)
     {
         _serviceScopeFactory = serviceScopeFactory;
-        _logger = logger;
+        _logger = logger.ForContext<AnalyticsService>();
         _cache = cache;
     }
 
@@ -47,12 +48,12 @@ public class AnalyticsService : IAnalyticsService
             // Invalidate cache to force refresh
             _cache.Remove(AnalyticsCacheKey);
 
-            _logger.LogInformation("Recorded scan: {FileName}, Score: {Score}, Threat: {IsThreat}, Time: {ScanTime}ms",
+            _logger.Information("Recorded scan: {FileName}, Score: {Score}, Threat: {IsThreat}, Time: {ScanTime}ms",
                 fileName, score, isThreat, scanTime.TotalMilliseconds);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to record scan analytics");
+            _logger.Error(ex, "Failed to record scan analytics");
             SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Failed to record scan analytics"));
         }
     }
@@ -132,7 +133,7 @@ public class AnalyticsService : IAnalyticsService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to calculate analytics");
+            _logger.Error(ex, "Failed to calculate analytics");
             SentrySdk.CaptureException(ex, scope => scope.SetExtra("message", "Failed to calculate analytics"));
 
             return new AnalyticsData { LastUpdated = DateTime.UtcNow };

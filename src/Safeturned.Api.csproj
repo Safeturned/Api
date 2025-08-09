@@ -57,4 +57,9 @@
     <ProjectReference Include="..\Safeturned.ServiceDefaults\Safeturned.ServiceDefaults.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="Scripts\*\*.sql"/>
+    <EmbeddedResource Include="Scripts\*\*.sql"/>
+  </ItemGroup>
+  
 </Project>
