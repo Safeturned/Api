@@ -167,8 +167,8 @@ jobs:
          }
          EOF
         
-        # Create deployment script
-        cat > ./deploy/deploy.sh << 'EOF'
+         # Create deployment script
+         cat > ./deploy/deploy.sh << 'EOF'
         #!/bin/bash
         set -e
         
