@@ -14,15 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
+    - name: Checkout code with submodules
       uses: actions/checkout@v4
       with:
         submodules: recursive
         token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Initialize submodules
+    - name: Force initialize submodule
       run: |
+        echo "=== Force initializing FileChecker submodule ==="
+        git submodule add --force https://github.com/Safeturned/FileChecker.git FileChecker || true
         git submodule update --init --recursive
+        echo "=== Checking submodule status ==="
+        git submodule status
+        echo "=== FileChecker directory contents ==="
+        ls -la FileChecker/
+        echo "=== FileChecker/src directory contents ==="
+        ls -la FileChecker/src/
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
