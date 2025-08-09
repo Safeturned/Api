@@ -107,17 +107,65 @@ jobs:
         # Create override to use registry image and expose port
         cat > ./deploy/docker-compose.override.yaml << EOF
         services:
-          safeturned-api:
-            image: ghcr.io/safeturned/api:latest
-            ports:
-              - "8081:8081"  # Map host port to container port
+          database:
             healthcheck:
-              test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
-              interval: 30s
-              timeout: 10s
-              retries: 3
-              start_period: 60s
-        EOF
+              test: ["CMD-SHELL", "pg_isready -U postgres"]
+              interval: 10s
+              timeout: 5s
+              retries: 5
+              start_period: 30s
+          
+           safeturned-api:
+             image: ghcr.io/safeturned/api:latest
+             ports:
+               - "8081:8081"  # Map host port to container port
+             depends_on:
+               database:
+                 condition: service_healthy
+             healthcheck:
+               test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+               interval: 30s
+               timeout: 10s
+               retries: 3
+               start_period: 60s
+           
+           nginx:
+             image: nginx:alpine
+             ports:
+               - "80:80"
+             volumes:
+               - ./nginx.conf:/etc/nginx/nginx.conf:ro
+             depends_on:
+               safeturned-api:
+                 condition: service_healthy
+             restart: unless-stopped
+         EOF
+         
+         # Create nginx configuration
+         cat > ./deploy/nginx.conf << 'EOF'
+         events {
+             worker_connections 1024;
+         }
+         
+         http {
+             upstream safeturned_api {
+                 server safeturned-api:8081;
+             }
+             
+             server {
+                 listen 80;
+                 server_name _;
+                 
+                 location / {
+                     proxy_pass http://safeturned_api;
+                     proxy_set_header Host $host;
+                     proxy_set_header X-Real-IP $remote_addr;
+                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                     proxy_set_header X-Forwarded-Proto $scheme;
+                 }
+             }
+         }
+         EOF
         
         # Create deployment script
         cat > ./deploy/deploy.sh << 'EOF'
@@ -159,7 +207,7 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml,./deploy/docker-compose.override.yaml"
+        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml,./deploy/docker-compose.override.yaml,./deploy/nginx.conf"
         target: "/opt/safeturned"
 
     - name: Deploy to server
