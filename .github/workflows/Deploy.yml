@@ -104,17 +104,17 @@ jobs:
         echo "Starting deployment..."
         
         # Stop existing containers
-        docker-compose down || true
+        docker compose down || true
         
         # Pull latest images for other services
-        docker-compose pull
+        docker compose pull
         
         # Start with new configuration
-        docker-compose up -d --build
+        docker compose up -d --build
         
         # Wait for services to be healthy
         echo "Waiting for services to be healthy..."
-        timeout 300 bash -c 'until docker-compose ps | grep -q "healthy"; do sleep 5; done' || echo "Warning: Some services may not be healthy"
+        timeout 300 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 5; done' || echo "Warning: Some services may not be healthy"
         
         echo "Deployment completed successfully!"
         echo "API is available on port 8080 for Cloudflare Tunnel"
