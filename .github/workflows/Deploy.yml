@@ -173,7 +173,7 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          cd /opt/safeturned
+          cd /opt/safeturned/deploy
           ./deploy.sh
 
     - name: Create Release
