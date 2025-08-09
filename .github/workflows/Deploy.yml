@@ -112,7 +112,7 @@ jobs:
         SAFETURNED_API_PORT=${{ secrets.SAFETURNED_API_PORT }}
         
         # Parameter database-password
-        DATABASE_PASSWORD=safeturned_password
+        DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
         
         # Container image name for safeturned-api
         SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:latest
@@ -194,8 +194,8 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         source: "./deploy/"
-        target: "/opt/safeturned/deploy"
-        strip_components: 0
+        target: "/opt/safeturned"
+        strip_components: 1
 
     - name: Debug server files
       uses: appleboy/ssh-action@v1
@@ -250,11 +250,17 @@ jobs:
           echo "=== Starting deployment ==="
           echo "Current directory: $(pwd)"
           
-          # Ensure the deploy directory exists
-          mkdir -p /opt/safeturned/deploy
-          
           # Check if we're in the right directory
-          if [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
+          if [ -f "/opt/safeturned/deploy.sh" ]; then
+            echo "✅ Found deploy.sh in root directory"
+            cd /opt/safeturned
+            
+            # Verify docker-compose files exist
+            echo "Checking for docker-compose files:"
+            ls -la *.yaml *.yml .env 2>/dev/null || echo "No docker-compose files found"
+            
+            ./deploy.sh
+          elif [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
             echo "✅ Found deploy.sh in deploy directory"
             cd /opt/safeturned/deploy
             
@@ -262,10 +268,6 @@ jobs:
             echo "Checking for docker-compose files:"
             ls -la *.yaml *.yml .env 2>/dev/null || echo "No docker-compose files found"
             
-            ./deploy.sh
-          elif [ -f "/opt/safeturned/deploy.sh" ]; then
-            echo "✅ Found deploy.sh in root directory"
-            cd /opt/safeturned
             ./deploy.sh
           else
             echo "❌ deploy.sh not found"
@@ -287,7 +289,7 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           echo "=== Debugging deployment status ==="
-          cd /opt/safeturned/deploy
+          cd /opt/safeturned
           
           echo "=== Current directory and files ==="
           pwd
