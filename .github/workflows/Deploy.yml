@@ -106,40 +106,13 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
-        # Update the .env file with our values
-        cat > ./deploy/.env << EOF
-        # Default container port for safeturned-api
-        SAFETURNED_API_PORT=${{ secrets.SAFETURNED_API_PORT }}
-        
-        DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
-        
-        SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:latest
-        
-        ASPNETCORE_ENVIRONMENT=${{ secrets.ASPNETCORE_ENVIRONMENT }}
-        
-        Hangfire__DashboardPath=${{ secrets.HANGFIRE_DASHBOARD_PATH }}
-        Hangfire__Username=${{ secrets.HANGFIRE_USERNAME }}
-        Hangfire__Password=${{ secrets.HANGFIRE_PASSWORD }}
-        
-        Sentry__Dsn=${{ secrets.SENTRY_DSN }}
-        EOF
-        
         # Create override to use registry image and expose port
         cat > ./deploy/docker-compose.override.yaml << EOF
         services:
           safeturned-api:
             image: ghcr.io/safeturned/api:latest
             ports:
-              - "8081:8081"  # Map host port to container port (both use SAFETURNED_API_PORT)
-            environment:
-              # Environment
-              - ASPNETCORE_ENVIRONMENT=\${ASPNETCORE_ENVIRONMENT}
-              
-              - Hangfire__DashboardPath=\${Hangfire__DashboardPath}
-              - Hangfire__Username=\${Hangfire__Username}
-              - Hangfire__Password=\${Hangfire__Password}
-              
-              - Sentry__Dsn=\${Sentry__Dsn}
+              - "8081:8081"  # Map host port to container port
             healthcheck:
               test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
               interval: 30s
@@ -148,20 +121,12 @@ jobs:
               start_period: 60s
         EOF
         
-        # Create deployment script with resolved variables
+        # Create deployment script
         cat > ./deploy/deploy.sh << 'EOF'
         #!/bin/bash
         set -e
         
         echo "Starting deployment..."
-        
-        # Set default environment variables
-        export DATABASE_PASSWORD=${DATABASE_PASSWORD:-"safeturned_password"}
-        export SAFETURNED_API_PORT=${SAFETURNED_API_PORT:-"${{ secrets.SAFETURNED_API_PORT }}"}
-        
-        echo "Environment variables set:"
-        echo "DATABASE_PASSWORD: $DATABASE_PASSWORD"
-        echo "SAFETURNED_API_PORT: $SAFETURNED_API_PORT"
         
         # Stop existing containers
         docker compose down || true
@@ -182,7 +147,7 @@ jobs:
         docker compose ps
         
         echo "Deployment completed successfully!"
-        echo "API is available on port $SAFETURNED_API_PORT for Cloudflare Tunnel"
+        echo "API is available on port 8081 for Cloudflare Tunnel"
         EOF
         
         chmod +x ./deploy/deploy.sh
@@ -208,9 +173,8 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/"
+        source: "./deploy/*"
         target: "/opt/safeturned"
-        strip_components: 1
 
     - name: Debug server files
       uses: appleboy/ssh-action@v1
