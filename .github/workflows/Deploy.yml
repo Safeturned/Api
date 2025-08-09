@@ -173,8 +173,9 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/*"
+        source: "./deploy/"
         target: "/opt/safeturned"
+        strip_components: 1
 
     - name: Debug server files
       uses: appleboy/ssh-action@v1
@@ -229,35 +230,15 @@ jobs:
           echo "=== Starting deployment ==="
           echo "Current directory: $(pwd)"
           
-          # Check if we're in the right directory
-          if [ -f "/opt/safeturned/deploy.sh" ]; then
-            echo "✅ Found deploy.sh in root directory"
-            cd /opt/safeturned
-            
-            # Verify docker-compose files exist
-            echo "Checking for docker-compose files:"
-            ls -la *.yaml *.yml .env 2>/dev/null || echo "No docker-compose files found"
-            
-            ./deploy.sh
-          elif [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
-            echo "✅ Found deploy.sh in deploy directory"
-            cd /opt/safeturned/deploy
-            
-            # Verify docker-compose files exist
-            echo "Checking for docker-compose files:"
-            ls -la *.yaml *.yml .env 2>/dev/null || echo "No docker-compose files found"
-            
-            ./deploy.sh
-          else
-            echo "❌ deploy.sh not found"
-            echo "Available files:"
-            ls -la /opt/safeturned/
-            if [ -d "/opt/safeturned/deploy" ]; then
-              echo "Files in deploy directory:"
-              ls -la /opt/safeturned/deploy/
-            fi
-            exit 1
-          fi
+          # Go to the correct directory
+          cd /opt/safeturned
+          
+          # Verify docker-compose files exist
+          echo "Checking for docker-compose files:"
+          ls -la *.yaml *.yml .env 2>/dev/null || echo "No docker-compose files found"
+          
+          # Run deployment
+          ./deploy.sh
 
     - name: Debug deployment status
       uses: appleboy/ssh-action@v1
