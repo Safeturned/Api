@@ -124,9 +124,9 @@ jobs:
           safeturned-api:
             image: ghcr.io/safeturned/api:latest
             ports:
-              - "${{ secrets.SAFETURNED_API_PORT }}:8080"  # Expose for Cloudflare Tunnel
+              - "8081:8081"  # Map host port to container port (both use SAFETURNED_API_PORT)
             healthcheck:
-              test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+              test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
               interval: 30s
               timeout: 10s
               retries: 3
@@ -194,7 +194,7 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         source: "./deploy/"
-        target: "/opt/safeturned"
+        target: "/opt/safeturned/deploy"
         strip_components: 0
 
     - name: Debug server files
@@ -212,9 +212,9 @@ jobs:
           echo "Safeturned directory contents:"
           ls -la /opt/safeturned/ || echo "Directory does not exist"
           echo "=== Checking if deploy.sh exists ==="
-          if [ -f "/opt/safeturned/deploy.sh" ]; then
+          if [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
             echo "✅ deploy.sh exists"
-            ls -la /opt/safeturned/deploy.sh
+            ls -la /opt/safeturned/deploy/deploy.sh
           else
             echo "❌ deploy.sh does not exist"
             echo "Files in /opt/safeturned/:"
@@ -234,6 +234,10 @@ jobs:
           else
             echo "❌ deploy directory does not exist"
           fi
+          
+          echo "=== Detailed file structure ==="
+          echo "Tree structure of /opt/safeturned:"
+          find /opt/safeturned -type f -name "*.yaml" -o -name "*.yml" -o -name "*.env" -o -name "*.sh" | sort
 
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
@@ -246,10 +250,18 @@ jobs:
           echo "=== Starting deployment ==="
           echo "Current directory: $(pwd)"
           
+          # Ensure the deploy directory exists
+          mkdir -p /opt/safeturned/deploy
+          
           # Check if we're in the right directory
           if [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
             echo "✅ Found deploy.sh in deploy directory"
             cd /opt/safeturned/deploy
+            
+            # Verify docker-compose files exist
+            echo "Checking for docker-compose files:"
+            ls -la *.yaml *.yml .env 2>/dev/null || echo "No docker-compose files found"
+            
             ./deploy.sh
           elif [ -f "/opt/safeturned/deploy.sh" ]; then
             echo "✅ Found deploy.sh in root directory"
@@ -265,6 +277,53 @@ jobs:
             fi
             exit 1
           fi
+
+    - name: Debug deployment status
+      uses: appleboy/ssh-action@v1
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        port: ${{ secrets.SSH_PORT }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          echo "=== Debugging deployment status ==="
+          cd /opt/safeturned/deploy
+          
+          echo "=== Current directory and files ==="
+          pwd
+          ls -la
+          
+          echo "=== Docker compose files ==="
+          echo "docker-compose.yaml exists: $([ -f "docker-compose.yaml" ] && echo "YES" || echo "NO")"
+          echo "docker-compose.override.yaml exists: $([ -f "docker-compose.override.yaml" ] && echo "YES" || echo "NO")"
+          echo ".env exists: $([ -f ".env" ] && echo "YES" || echo "NO")"
+          
+          echo "=== Docker compose.yaml content ==="
+          cat docker-compose.yaml || echo "File not found"
+          
+          echo "=== Docker compose.override.yaml content ==="
+          cat docker-compose.override.yaml || echo "File not found"
+          
+          echo "=== .env content ==="
+          cat .env || echo "File not found"
+          
+          echo "=== Container Status ==="
+          docker compose ps
+          
+          echo "=== Container Logs ==="
+          docker compose logs safeturned-api
+          
+          echo "=== Port Check ==="
+          netstat -tlnp | grep 8081 || echo "Port 8081 not listening"
+          
+          echo "=== Test API from host ==="
+          curl -v http://localhost:8081/health || echo "API not responding"
+          
+          echo "=== Test API from container network ==="
+          docker compose exec safeturned-api wget --no-verbose --tries=1 --spider http://localhost:8081/health || echo "Internal health check failed"
+          
+          echo "=== Cloudflare Tunnel Configuration ==="
+          echo "For Cloudflare Tunnel, use: http://deploy-safeturned-api-1:8081"
 
     #- name: Create Release
     #  if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
