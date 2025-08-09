@@ -160,8 +160,8 @@ jobs:
          
          docker compose up -d
          
-         echo "Waiting for services to be healthy..."
-         timeout 180 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 15; echo "Still waiting for healthy services..."; docker compose ps; done' || echo "Warning: Some services may not be healthy"
+                   echo "Waiting for services to be healthy..."
+          timeout 300 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 20; echo "Still waiting for healthy services..."; docker compose ps; done' || echo "Warning: Some services may not be healthy"
          
          echo "Deployment completed successfully!"
          echo "API is available on port 8081 for Cloudflare Tunnel"
