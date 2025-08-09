@@ -189,15 +189,19 @@ jobs:
           echo "Safeturned directory contents:"
           ls -la /opt/safeturned/ || echo "Directory does not exist"
           
+          echo "=== Checking deploy subdirectory ==="
+          echo "Deploy directory contents:"
+          ls -la /opt/safeturned/deploy/ || echo "Deploy directory does not exist"
+          
           echo "=== Checking specific files ==="
-          echo "deploy.sh exists: $([ -f "/opt/safeturned/deploy.sh" ] && echo "YES" || echo "NO")"
-          echo "docker-compose.yaml exists: $([ -f "/opt/safeturned/docker-compose.yaml" ] && echo "YES" || echo "NO")"
-          echo "docker-compose.override.yaml exists: $([ -f "/opt/safeturned/docker-compose.override.yaml" ] && echo "YES" || echo "NO")"
+          echo "deploy.sh exists: $([ -f "/opt/safeturned/deploy/deploy.sh" ] && echo "YES" || echo "NO")"
+          echo "docker-compose.yaml exists: $([ -f "/opt/safeturned/deploy/docker-compose.yaml" ] && echo "YES" || echo "NO")"
+          echo "docker-compose.override.yaml exists: $([ -f "/opt/safeturned/deploy/docker-compose.override.yaml" ] && echo "YES" || echo "NO")"
           echo ".env exists: $([ -f "/opt/safeturned/.env" ] && echo "YES" || echo "NO")"
           
-          if [ -f "/opt/safeturned/deploy.sh" ]; then
+          if [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
             echo "✅ deploy.sh found and executable"
-            ls -la /opt/safeturned/deploy.sh
+            ls -la /opt/safeturned/deploy/deploy.sh
           else
             echo "❌ deploy.sh not found"
           fi
@@ -213,8 +217,8 @@ jobs:
           echo "=== Starting deployment ==="
           echo "Current directory: $(pwd)"
           
-          # Go to the correct directory
-          cd /opt/safeturned
+          # Go to the deploy directory where files are copied
+          cd /opt/safeturned/deploy
           
           # Verify docker-compose files exist
           echo "Checking for docker-compose files:"
