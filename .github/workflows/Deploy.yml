@@ -35,9 +35,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       env:
-          DOTNET_NOLOGO: true
-          DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-          DOTNET_CLI_TELEMETRY_OPTOUT: true
+        DOTNET_NOLOGO: true
+        DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+        DOTNET_CLI_TELEMETRY_OPTOUT: true
       with:
         dotnet-version: 9.*
 
@@ -124,6 +124,15 @@ jobs:
         
         echo "Deployment package created in ./deploy/"
 
+    - name: Debug deployment files
+      run: |
+        echo "=== Debugging deployment files ==="
+        echo "Current directory: $(pwd)"
+        echo "Deploy directory contents:"
+        ls -la ./deploy/
+        echo "Deploy.sh contents:"
+        cat ./deploy/deploy.sh
+
     - name: Copy files to server
       uses: appleboy/scp-action@v1
       with:
@@ -131,9 +140,24 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/*"
+        source: "./deploy/"
         target: "/opt/safeturned"
-        strip_components: 1
+        strip_components: 0
+
+    - name: Debug server files
+      uses: appleboy/ssh-action@v1
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        port: ${{ secrets.SSH_PORT }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          echo "=== Debugging server files ==="
+          echo "Current directory: $(pwd)"
+          echo "Opt directory contents:"
+          ls -la /opt/
+          echo "Safeturned directory contents:"
+          ls -la /opt/safeturned/ || echo "Directory does not exist"
 
     - name: Copy Aspire build artifacts
       run: |
@@ -145,7 +169,7 @@ jobs:
       uses: appleboy/ssh-action@v1
       with:
         host: ${{ secrets.SERVER_HOST }}
-        port: ${{ secrets.SSH_PORT || 22 }}
+        port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
