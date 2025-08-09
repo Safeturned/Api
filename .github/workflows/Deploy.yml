@@ -104,42 +104,25 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
-        # Create override to use registry image and expose port
-        cat > ./deploy/docker-compose.override.yaml << 'EOF'
-        services:
-          database:
-            healthcheck:
-              test: ["CMD-SHELL", "pg_isready -U postgres"]
-              interval: 10s
-              timeout: 5s
-              retries: 5
-              start_period: 30s
-          
-          safeturned-api:
-            image: ghcr.io/safeturned/api:latest
-            ports:
-              - "8081:8081"  # Map host port to container port
-            depends_on:
-              database:
-                condition: service_healthy
-            healthcheck:
-              test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
-              interval: 30s
-              timeout: 10s
-              retries: 5
-              start_period: 120s
-          
-          nginx:
-            image: nginx:alpine
-            ports:
-              - "80:80"
-            volumes:
-              - ./nginx.conf:/etc/nginx/nginx.conf:ro
-            depends_on:
-              safeturned-api:
-                condition: service_healthy
-            restart: unless-stopped
-        EOF
+                 # Create override to use registry image and expose port
+         cat > ./deploy/docker-compose.override.yaml << 'EOF'
+         services:
+           safeturned-api:
+             image: ghcr.io/safeturned/api:latest
+             ports:
+               - "8081:8081"  # Map host port to container port
+           
+           nginx:
+             image: nginx:alpine
+             ports:
+               - "80:80"
+             volumes:
+               - ./nginx.conf:/etc/nginx/nginx.conf:ro
+             depends_on:
+               safeturned-api:
+                 condition: service_healthy
+             restart: unless-stopped
+         EOF
          
          # Create nginx configuration
          cat > ./deploy/nginx.conf << 'EOF'
