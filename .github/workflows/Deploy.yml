@@ -178,7 +178,7 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/"
+        source: "./deploy/*"
         target: "/opt/safeturned"
         strip_components: 0
 
