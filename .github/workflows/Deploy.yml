@@ -168,34 +168,33 @@ jobs:
          EOF
         
          # Create deployment script
-         mkdir -p ./deploy
          cat > ./deploy/deploy.sh << 'EOF'
-        #!/bin/bash
-        set -e
-        
-        echo "Starting deployment..."
-        
-        # Stop existing containers
-        docker compose down || true
-        
-        # Pull the latest image from registry
-        echo "Pulling latest image from registry..."
-        docker pull ghcr.io/safeturned/api:latest || echo "Image pull failed, will build locally"
-        
-        # Start with Aspire's docker-compose
-        docker compose up -d
-        
-        # Wait for services to be healthy
-        echo "Waiting for services to be healthy..."
-        timeout 120 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 10; echo "Still waiting for healthy services..."; done' || echo "Warning: Some services may not be healthy"
-        
-        # Show final status
-        echo "Final container status:"
-        docker compose ps
-        
-        echo "Deployment completed successfully!"
-        echo "API is available on port 8081 for Cloudflare Tunnel"
-        EOF
+         #!/bin/bash
+         set -e
+         
+         echo "Starting deployment..."
+         
+         # Stop existing containers
+         docker compose down || true
+         
+         # Pull the latest image from registry
+         echo "Pulling latest image from registry..."
+         docker pull ghcr.io/safeturned/api:latest || echo "Image pull failed, will build locally"
+         
+         # Start with Aspire's docker-compose
+         docker compose up -d
+         
+         # Wait for services to be healthy
+         echo "Waiting for services to be healthy..."
+         timeout 120 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 10; echo "Still waiting for healthy services..."; done' || echo "Warning: Some services may not be healthy"
+         
+         # Show final status
+         echo "Final container status:"
+         docker compose ps
+         
+         echo "Deployment completed successfully!"
+         echo "API is available on port 8081 for Cloudflare Tunnel"
+         EOF
 
         echo "Deployment package created in ./deploy/"
         echo "=== Debug: Listing deploy directory contents ==="
