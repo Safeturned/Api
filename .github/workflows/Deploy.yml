@@ -123,11 +123,11 @@ jobs:
               database:
                 condition: service_healthy
             healthcheck:
-              test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+              test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
               interval: 30s
               timeout: 10s
-              retries: 3
-              start_period: 60s
+              retries: 5
+              start_period: 120s
           
           nginx:
             image: nginx:alpine
@@ -186,11 +186,7 @@ jobs:
          
          # Wait for services to be healthy
          echo "Waiting for services to be healthy..."
-         timeout 120 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 10; echo "Still waiting for healthy services..."; done' || echo "Warning: Some services may not be healthy"
-         
-         # Show final status
-         echo "Final container status:"
-         docker compose ps
+         timeout 180 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 15; echo "Still waiting for healthy services..."; docker compose ps; done' || echo "Warning: Some services may not be healthy"
          
          echo "Deployment completed successfully!"
          echo "API is available on port 8081 for Cloudflare Tunnel"
