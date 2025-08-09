@@ -69,8 +69,8 @@ jobs:
           echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
           # Tag and push
-          docker tag "$BUILT_IMAGE" "ghcr.io/${{ github.repository }}:latest"
-          docker push "ghcr.io/${{ github.repository }}:latest"
+          docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:latest"
+          docker push "ghcr.io/safeturned/api:latest"
 
           echo "✅ Image pushed successfully"
         else
