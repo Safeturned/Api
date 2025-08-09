@@ -105,7 +105,7 @@ jobs:
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
         # Create override to use registry image and expose port
-        cat > ./deploy/docker-compose.override.yaml << EOF
+        cat > ./deploy/docker-compose.override.yaml << 'EOF'
         services:
           database:
             healthcheck:
@@ -116,30 +116,30 @@ jobs:
               start_period: 30s
           
           safeturned-api:
-             image: ghcr.io/safeturned/api:latest
-             ports:
-               - "8081:8081"  # Map host port to container port
-             depends_on:
-               database:
-                 condition: service_healthy
-             healthcheck:
-               test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
-               interval: 30s
-               timeout: 10s
-               retries: 3
-               start_period: 60s
-           
-           nginx:
-             image: nginx:alpine
-             ports:
-               - "80:80"
-             volumes:
-               - ./nginx.conf:/etc/nginx/nginx.conf:ro
-             depends_on:
-               safeturned-api:
-                 condition: service_healthy
-             restart: unless-stopped
-         EOF
+            image: ghcr.io/safeturned/api:latest
+            ports:
+              - "8081:8081"  # Map host port to container port
+            depends_on:
+              database:
+                condition: service_healthy
+            healthcheck:
+              test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+              interval: 30s
+              timeout: 10s
+              retries: 3
+              start_period: 60s
+          
+          nginx:
+            image: nginx:alpine
+            ports:
+              - "80:80"
+            volumes:
+              - ./nginx.conf:/etc/nginx/nginx.conf:ro
+            depends_on:
+              safeturned-api:
+                condition: service_healthy
+            restart: unless-stopped
+        EOF
          
          # Create nginx configuration
          cat > ./deploy/nginx.conf << 'EOF'
@@ -199,6 +199,12 @@ jobs:
         chmod +x ./deploy/deploy.sh
         
         echo "Deployment package created in ./deploy/"
+        echo "=== Debug: Listing deploy directory contents ==="
+        ls -la ./deploy/
+        echo "=== Debug: Checking if deploy.sh exists and is executable ==="
+        ls -la ./deploy/deploy.sh || echo "deploy.sh not found"
+        echo "=== Debug: File contents of deploy.sh (first 10 lines) ==="
+        head -10 ./deploy/deploy.sh || echo "Cannot read deploy.sh"
 
     - name: Copy files to server
       uses: appleboy/scp-action@v1
