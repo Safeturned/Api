@@ -103,47 +103,12 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
-        cat > ./deploy/docker-compose.override.yaml << 'EOF'
-        services:
-          safeturned-api:
-            image: ghcr.io/safeturned/api:latest
-            ports:
-              - "8081:8081"  # Map host port to container port
-          
-          nginx:
-            image: nginx:alpine
-            ports:
-              - "8082:80"
-            volumes:
-              - ./nginx.conf:/etc/nginx/nginx.conf:ro
-            depends_on:
-              - safeturned-api
-            restart: unless-stopped
-        EOF
-         
-        cat > ./deploy/nginx.conf << 'EOF'
-         events {
-             worker_connections 1024;
-         }
-         
-                   http {
-              upstream safeturned_api {
-                  server safeturned-api:80;
-              }
-             
-             server {
-                 listen 80;
-                 server_name _;
-                 
-                 location / {
-                     proxy_pass http://safeturned_api;
-                     proxy_set_header Host $host;
-                     proxy_set_header X-Real-IP $remote_addr;
-                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                     proxy_set_header X-Forwarded-Proto $scheme;
-                 }
-             }
-         }
+                 cat > ./deploy/docker-compose.override.yaml << 'EOF'
+         services:
+           safeturned-api:
+             image: ghcr.io/safeturned/api:latest
+             ports:
+               - "8081:8081"  # Map host port 8081 to container port 8081
          EOF
         
         cat > ./deploy/deploy.sh << 'EOF'
@@ -179,7 +144,7 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml,./deploy/docker-compose.override.yaml,./deploy/nginx.conf"
+        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml,./deploy/docker-compose.override.yaml"
         target: "/opt/safeturned"
 
     - name: Deploy to server
