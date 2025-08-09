@@ -128,7 +128,7 @@ jobs:
       uses: appleboy/scp-action@v1
       with:
         host: ${{ secrets.SERVER_HOST }}
-        port: ${{ secrets.SSH_PORT || 22 }}
+        port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         source: "./deploy/*"
