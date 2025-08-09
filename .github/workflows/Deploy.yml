@@ -103,29 +103,29 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
-                 cat > ./deploy/docker-compose.override.yaml << 'EOF'
-         services:
-           safeturned-api:
-             image: ghcr.io/safeturned/api:latest
-             ports:
-               - "8081:8081"  # Map host port 8081 to container port 8081
-         EOF
+        cat > ./deploy/docker-compose.override.yaml << 'EOF'
+        services:
+          safeturned-api:
+            image: ghcr.io/safeturned/api:latest
+            ports:
+              - "8081:8081"  # Map host port 8081 to container port 8081
+        EOF
         
         cat > ./deploy/deploy.sh << 'EOF'
-         #!/bin/bash
-         set -e
-         
-         echo "Starting deployment..."
-         
-         docker compose down || true
-         
-         echo "Pulling latest image from registry..."
-         docker pull ghcr.io/safeturned/api:latest || echo "Image pull failed, will build locally"
-         
-                   docker compose up -d
-          
-          echo "Deployment completed successfully!"
-         EOF
+        #!/bin/bash
+        set -e
+        
+        echo "Starting deployment..."
+        
+        docker compose down || true
+        
+        echo "Pulling latest image from registry..."
+        docker pull ghcr.io/safeturned/api:latest || echo "Image pull failed, will build locally"
+        
+        docker compose up -d
+        
+        echo "Deployment completed successfully!"
+        EOF
 
         echo "Deployment package created in ./deploy/"
         echo "=== Debug: Listing deploy directory contents ==="
