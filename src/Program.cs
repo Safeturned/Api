@@ -4,6 +4,7 @@ using Hangfire;
 using Hangfire.Console;
 using Hangfire.PostgreSql;
 using HangfireBasicAuthenticationFilter;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api;
 using Safeturned.Api.Database;
@@ -124,6 +125,8 @@ services.AddDbContext<FilesDbContext>(options =>
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
+services.AddSerilog(Log.Logger);
+
 var app = builder.Build();
 
 app.MapDefaultEndpoints();
@@ -138,7 +141,13 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+                       ForwardedHeaders.XForwardedProto
+});
 
 //app.UseAuthentication();
 app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error, more: https://github.com/dotnet/aspnetcore/issues/51888
