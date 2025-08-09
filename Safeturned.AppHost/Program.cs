@@ -8,6 +8,7 @@ var database = builder.AddPostgres("database")
     .AddDatabase("safeturned-db");
 
 builder.AddProject<Projects.Safeturned_Api>("safeturned-api")
+    .WithHttpHealthCheck("/health")
     .WithReference(database)
     .WaitFor(database);
 
