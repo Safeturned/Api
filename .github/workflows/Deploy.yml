@@ -196,7 +196,7 @@ jobs:
         echo "API is available on port 8081 for Cloudflare Tunnel"
         EOF
         
-        chmod +x ./deploy/deploy.sh
+        chmod +x ./deploy.sh
         
         echo "Deployment package created in ./deploy/"
 
