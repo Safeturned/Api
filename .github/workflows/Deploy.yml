@@ -104,23 +104,23 @@ jobs:
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
         cat > ./deploy/docker-compose.override.yaml << 'EOF'
-         services:
-           safeturned-api:
-             image: ghcr.io/safeturned/api:latest
-             ports:
-               - "8081:8081"  # Map host port to container port
-           
-           nginx:
-             image: nginx:alpine
-             ports:
-               - "80:80"
-             volumes:
-               - ./nginx.conf:/etc/nginx/nginx.conf:ro
-             depends_on:
-               safeturned-api:
-                 condition: service_healthy
-             restart: unless-stopped
-         EOF
+        services:
+          safeturned-api:
+            image: ghcr.io/safeturned/api:latest
+            ports:
+              - "8081:8081"  # Map host port to container port
+          
+          nginx:
+            image: nginx:alpine
+            ports:
+              - "80:80"
+            volumes:
+              - ./nginx.conf:/etc/nginx/nginx.conf:ro
+            depends_on:
+              safeturned-api:
+                condition: service_healthy
+            restart: unless-stopped
+        EOF
          
         cat > ./deploy/nginx.conf << 'EOF'
          events {
@@ -147,7 +147,7 @@ jobs:
          }
          EOF
         
-         cat > ./deploy/deploy.sh << 'EOF'
+        cat > ./deploy/deploy.sh << 'EOF'
          #!/bin/bash
          set -e
          
