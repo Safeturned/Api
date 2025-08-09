@@ -36,12 +36,12 @@ var loggerFactory = new ServiceCollection()
     .GetRequiredService<ILoggerFactory>();
 #pragma warning restore ASP0000
 
-var connectionString = config.GetRequiredConnectionString("safeturned-db");
+var dbConnectionString = config.GetRequiredConnectionString("safeturned-db");
 
 var dbPrepare = new DatabasePreparator(loggerFactory);
 dbPrepare
-    .Add("Hangfire", connectionString, DbPrepareType.PostgreSql, true)
-    .Add("Files", connectionString, DbPrepareType.PostgreSql, true, DbReference.Filter)
+    .Add("Hangfire", dbConnectionString, DbPrepareType.PostgreSql, true)
+    .Add("Files", dbConnectionString, DbPrepareType.PostgreSql, true, DbReference.Filter)
     .Prepare();
 
 host.UseDefaultServiceProvider((_, options) =>
@@ -81,7 +81,7 @@ services.AddApiVersioning(options =>
     options.DefaultApiVersion = new ApiVersion(1);
     options.AssumeDefaultVersionWhenUnspecified = true;
     options.ReportApiVersions = true;
-    options.ApiVersionReader =  new HeaderApiVersionReader("api-version");
+    options.ApiVersionReader = new HeaderApiVersionReader("api-version");
 }).AddMvc()
 .AddApiExplorer(options =>
 {
@@ -97,7 +97,7 @@ services.AddHangfire(x => x
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
     .UsePostgreSqlStorage(
-        xx => xx.UseNpgsqlConnection(config.GetRequiredConnectionString("safeturned-db")), new PostgreSqlStorageOptions
+        xx => xx.UseNpgsqlConnection(dbConnectionString), new PostgreSqlStorageOptions
         {
             PrepareSchemaIfNecessary = true,
             InvisibilityTimeout = TimeSpan.FromHours(7),
