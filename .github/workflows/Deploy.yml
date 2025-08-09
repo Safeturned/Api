@@ -60,21 +60,18 @@ jobs:
         
     - name: Tag and push Docker image
       run: |
-        # Find the latest built image for safeturned-api from aspire publish
         BUILT_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep safeturned-api | head -n 1)
-
+    
         if [ -n "$BUILT_IMAGE" ]; then
           echo "Found built image: $BUILT_IMAGE"
-
-          # Login to registry
-          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login ${{ env.DOCKER_REGISTRY }} -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-
-          # Tag with registry path
-          docker tag "$BUILT_IMAGE" "${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
-          # Push to registry
-          docker push "${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          
+    
+          # Login to GHCR with GITHUB_TOKEN
+          echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+    
+          # Tag and push
+          docker tag "$BUILT_IMAGE" "ghcr.io/${{ github.repository }}:latest"
+          docker push "ghcr.io/${{ github.repository }}:latest"
+    
           echo "✅ Image pushed successfully"
         else
           echo "❌ No built image found, skipping push"
