@@ -182,6 +182,9 @@ jobs:
         ls -la ./deploy/
         echo "Deploy.sh contents:"
         cat ./deploy/deploy.sh
+        echo "=== Testing file copy ==="
+        echo "Files to be copied:"
+        ls -la ./deploy/*
 
     - name: Copy files to server
       uses: appleboy/scp-action@v1
@@ -190,7 +193,7 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/*"
+        source: "./deploy/"
         target: "/opt/safeturned"
         strip_components: 0
 
@@ -208,6 +211,15 @@ jobs:
           ls -la /opt/
           echo "Safeturned directory contents:"
           ls -la /opt/safeturned/ || echo "Directory does not exist"
+          echo "=== Checking if deploy.sh exists ==="
+          if [ -f "/opt/safeturned/deploy.sh" ]; then
+            echo "✅ deploy.sh exists"
+            ls -la /opt/safeturned/deploy.sh
+          else
+            echo "❌ deploy.sh does not exist"
+            echo "Files in /opt/safeturned/:"
+            ls -la /opt/safeturned/ || echo "Directory is empty"
+          fi
 
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
@@ -217,7 +229,7 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          cd /opt/safeturned
+          cd /opt/safeturned/deploy
           ./deploy.sh
 
     #- name: Create Release
