@@ -50,6 +50,13 @@ jobs:
     - name: Publish with Aspire
       run: |
         aspire publish -o ./publish/aspire
+        
+    - name: Debug Aspire output
+      run: |
+        echo "=== Aspire publish output ==="
+        ls -la ./publish/aspire/
+        echo "=== Docker compose content ==="
+        cat ./publish/aspire/docker-compose.yaml
 
     - name: Create deployment package
       run: |
@@ -59,41 +66,14 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/*.env ./deploy/ 2>/dev/null || true
         
-        # Create environment-specific docker-compose override for Docker-based cloudflared
+        # No tar files from Aspire - it builds locally but doesn't export
+        
+        # Create a simple override to expose the API port for Cloudflare Tunnel
         cat > ./deploy/docker-compose.override.yaml << 'EOF'
         services:
           safeturned-api:
-            image: safeturned-api:latest
-            environment:
-              ASPNETCORE_ENVIRONMENT: Production
-              ASPNETCORE_URLS: http://0.0.0.0:80
             ports:
-              - "8080:80"  # Expose on port 8080 for Cloudflare Tunnel
-            restart: unless-stopped
-            healthcheck:
-              test: ["CMD", "curl", "-f", "http://localhost:80/health"]
-              interval: 30s
-              timeout: 10s
-              retries: 3
-              start_period: 40s
-            networks:
-              - aspire
-          
-          # Optional: Add cloudflared service if not already running separately
-          cloudflared:
-            image: cloudflare/cloudflared:latest
-            command: tunnel run
-            environment:
-              - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-            restart: unless-stopped
-            depends_on:
-              - safeturned-api
-            networks:
-              - aspire
-          
-        networks:
-          aspire:
-            external: true
+              - "8080:${SAFETURNED_API_PORT:-80}"  # Expose for Cloudflare Tunnel
         EOF
         
         # Create deployment script
@@ -103,13 +83,20 @@ jobs:
         
         echo "Starting deployment..."
         
+        # Set default environment variables
+        export DATABASE_PASSWORD=${DATABASE_PASSWORD:-"safeturned_password"}
+        export SAFETURNED_API_PORT=${SAFETURNED_API_PORT:-"8080"}
+        export CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-""}
+        
+        echo "Environment variables set:"
+        echo "DATABASE_PASSWORD: $DATABASE_PASSWORD"
+        echo "SAFETURNED_API_PORT: $SAFETURNED_API_PORT"
+        echo "CLOUDFLARE_TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:0:10}..."
+        
         # Stop existing containers
         docker compose down || true
         
-        # Pull latest images for other services
-        docker compose pull
-        
-        # Start with new configuration
+        # Start with Aspire's docker-compose (it handles building)
         docker compose up -d --build
         
         # Wait for services to be healthy
