@@ -58,8 +58,6 @@ jobs:
       run: |
         echo "=== Aspire publish output ==="
         ls -la ./publish/aspire/
-        echo "=== Docker compose content ==="
-        cat ./publish/aspire/docker-compose.yaml
         
     - name: Login to GHCR
       run: |
@@ -154,18 +152,6 @@ jobs:
         
         echo "Deployment package created in ./deploy/"
 
-    - name: Debug deployment files
-      run: |
-        echo "=== Debugging deployment files ==="
-        echo "Current directory: $(pwd)"
-        echo "Deploy directory contents:"
-        ls -la ./deploy/
-        echo "Deploy.sh contents:"
-        cat ./deploy/deploy.sh
-        echo "=== Testing file copy ==="
-        echo "Files to be copied:"
-        ls -la ./deploy/*
-
     - name: Copy files to server
       uses: appleboy/scp-action@v1
       with:
@@ -176,36 +162,6 @@ jobs:
         source: "./deploy/deploy.sh,./deploy/docker-compose.yaml,./deploy/docker-compose.override.yaml"
         target: "/opt/safeturned"
 
-    - name: Debug server files
-      uses: appleboy/ssh-action@v1
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        port: ${{ secrets.SSH_PORT }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          echo "=== Debugging server files ==="
-          echo "Current directory: $(pwd)"
-          echo "Safeturned directory contents:"
-          ls -la /opt/safeturned/ || echo "Directory does not exist"
-          
-          echo "=== Checking deploy subdirectory ==="
-          echo "Deploy directory contents:"
-          ls -la /opt/safeturned/deploy/ || echo "Deploy directory does not exist"
-          
-          echo "=== Checking specific files ==="
-          echo "deploy.sh exists: $([ -f "/opt/safeturned/deploy/deploy.sh" ] && echo "YES" || echo "NO")"
-          echo "docker-compose.yaml exists: $([ -f "/opt/safeturned/deploy/docker-compose.yaml" ] && echo "YES" || echo "NO")"
-          echo "docker-compose.override.yaml exists: $([ -f "/opt/safeturned/deploy/docker-compose.override.yaml" ] && echo "YES" || echo "NO")"
-          echo ".env exists: $([ -f "/opt/safeturned/.env" ] && echo "YES" || echo "NO")"
-          
-          if [ -f "/opt/safeturned/deploy/deploy.sh" ]; then
-            echo "✅ deploy.sh found and executable"
-            ls -la /opt/safeturned/deploy/deploy.sh
-          else
-            echo "❌ deploy.sh not found"
-          fi
-
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
       with:
@@ -215,19 +171,14 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           echo "=== Starting deployment ==="
-          echo "Current directory: $(pwd)"
           
           # Go to the deploy directory where files are copied
           cd /opt/safeturned/deploy
           
-          # Verify docker-compose files exist
-          echo "Checking for docker-compose files:"
-          ls -la *.yaml *.yml .env 2>/dev/null || echo "No docker-compose files found"
-          
           # Run deployment
           ./deploy.sh
 
-    - name: Debug deployment status
+    - name: Verify deployment
       uses: appleboy/ssh-action@v1
       with:
         host: ${{ secrets.SERVER_HOST }}
@@ -235,44 +186,19 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          echo "=== Debugging deployment status ==="
+          echo "=== Verifying deployment ==="
           cd /opt/safeturned
-          
-          echo "=== Current directory and files ==="
-          pwd
-          ls -la
-          
-          echo "=== Docker compose files ==="
-          echo "docker-compose.yaml exists: $([ -f "docker-compose.yaml" ] && echo "YES" || echo "NO")"
-          echo "docker-compose.override.yaml exists: $([ -f "docker-compose.override.yaml" ] && echo "YES" || echo "NO")"
-          echo ".env exists: $([ -f ".env" ] && echo "YES" || echo "NO")"
-          
-          echo "=== Docker compose.yaml content ==="
-          cat docker-compose.yaml || echo "File not found"
-          
-          echo "=== Docker compose.override.yaml content ==="
-          cat docker-compose.override.yaml || echo "File not found"
-          
-          echo "=== .env content ==="
-          cat .env || echo "File not found"
           
           echo "=== Container Status ==="
           docker compose ps
-          
-          echo "=== Container Logs ==="
-          docker compose logs safeturned-api
           
           echo "=== Port Check ==="
           netstat -tlnp | grep 8081 || echo "Port 8081 not listening"
           
           echo "=== Test API from host ==="
-          curl -v http://localhost:8081/health || echo "API not responding"
+          curl -f -s http://localhost:8081/health && echo "✅ API is responding" || echo "❌ API not responding"
           
-          echo "=== Test API from container network ==="
-          docker compose exec safeturned-api wget --no-verbose --tries=1 --spider http://localhost:8081/health || echo "Internal health check failed"
-          
-          echo "=== Cloudflare Tunnel Configuration ==="
-          echo "For Cloudflare Tunnel, use: http://deploy-safeturned-api-1:8081"
+          echo "=== Deployment verification completed ==="
 
     #- name: Create Release
     #  if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
