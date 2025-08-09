@@ -104,7 +104,19 @@ jobs:
         
         # Copy Aspire generated files
         cp ./publish/aspire/docker-compose.yaml ./deploy/
-        cp ./publish/aspire/*.env ./deploy/ 2>/dev/null || true
+        cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
+        
+        # Update the .env file with our values
+        cat > ./deploy/.env << EOF
+        # Default container port for safeturned-api
+        SAFETURNED_API_PORT=${{ secrets.SAFETURNED_API_PORT }}
+        
+        # Parameter database-password
+        DATABASE_PASSWORD=safeturned_password
+        
+        # Container image name for safeturned-api
+        SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:latest
+        EOF
         
         # Create override to use registry image and expose port
         cat > ./deploy/docker-compose.override.yaml << EOF
