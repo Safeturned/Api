@@ -61,25 +61,42 @@ jobs:
         echo "=== Docker compose content ==="
         cat ./publish/aspire/docker-compose.yaml
         
-    - name: Tag and push Docker image
+    - name: Login to GHCR
       run: |
-        BUILT_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep safeturned-api | head -n 1)
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
-        if [ -n "$BUILT_IMAGE" ]; then
-          echo "Found built image: $BUILT_IMAGE"
-
-          # Login to GHCR with GITHUB_TOKEN
-          echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-
-          # Tag and push
-          docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:latest"
-          docker push "ghcr.io/safeturned/api:latest"
-
-          echo "✅ Image pushed successfully"
-        else
-          echo "❌ No built image found, skipping push"
+    - name: Find and tag Docker image
+      run: |
+        # Look for the built image with various possible names
+        BUILT_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "(safeturned-api|safeturned-api)" | head -n 1)
+        
+        if [ -z "$BUILT_IMAGE" ]; then
+          # Try to find any image with safeturned in the name
+          BUILT_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep safeturned | head -n 1)
+        fi
+        
+        if [ -z "$BUILT_IMAGE" ]; then
+          # List all images for debugging
+          echo "Available Docker images:"
+          docker images
+          echo "❌ No built image found"
           exit 1
         fi
+        
+        echo "Found built image: $BUILT_IMAGE"
+        
+        # Tag for GHCR
+        docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:latest"
+        docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:v${{ github.run_number }}"
+        
+        echo "✅ Image tagged successfully"
+
+    - name: Push Docker image
+      run: |
+        # Push both latest and versioned tags
+        docker push "ghcr.io/safeturned/api:latest"
+        docker push "ghcr.io/safeturned/api:v${{ github.run_number }}"
+        echo "✅ Images pushed successfully"
 
     - name: Create deployment package
       run: |
@@ -89,15 +106,13 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/*.env ./deploy/ 2>/dev/null || true
         
-        # No tar files from Aspire - it builds locally but doesn't export
-        
         # Create override to use registry image and expose port
-        cat > ./deploy/docker-compose.override.yaml << 'EOF'
+        cat > ./deploy/docker-compose.override.yaml << EOF
         services:
           safeturned-api:
-            image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            image: ghcr.io/safeturned/api:latest
             ports:
-              - "8081:${SAFETURNED_API_PORT:-80}"  # Expose for Cloudflare Tunnel
+              - "${{ secrets.SAFETURNED_API_PORT }}:8080"  # Expose for Cloudflare Tunnel
             healthcheck:
               test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
               interval: 30s
@@ -106,7 +121,7 @@ jobs:
               start_period: 60s
         EOF
         
-        # Create deployment script
+        # Create deployment script with resolved variables
         cat > ./deploy/deploy.sh << 'EOF'
         #!/bin/bash
         set -e
@@ -115,20 +130,18 @@ jobs:
         
         # Set default environment variables
         export DATABASE_PASSWORD=${DATABASE_PASSWORD:-"safeturned_password"}
-        export SAFETURNED_API_PORT=${SAFETURNED_API_PORT:-"8080"}
-        export CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-""}
+        export SAFETURNED_API_PORT=${SAFETURNED_API_PORT:-"${{ secrets.SAFETURNED_API_PORT }}"}
         
         echo "Environment variables set:"
         echo "DATABASE_PASSWORD: $DATABASE_PASSWORD"
         echo "SAFETURNED_API_PORT: $SAFETURNED_API_PORT"
-        echo "CLOUDFLARE_TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:0:10}..."
         
         # Stop existing containers
         docker compose down || true
         
         # Pull the latest image from registry
         echo "Pulling latest image from registry..."
-        docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest || echo "Image pull failed, will build locally"
+        docker pull ghcr.io/safeturned/api:latest || echo "Image pull failed, will build locally"
         
         # Start with Aspire's docker-compose
         docker compose up -d
@@ -142,7 +155,7 @@ jobs:
         docker compose ps
         
         echo "Deployment completed successfully!"
-        echo "API is available on port 8081 for Cloudflare Tunnel"
+        echo "API is available on port $SAFETURNED_API_PORT for Cloudflare Tunnel"
         EOF
         
         chmod +x ./deploy/deploy.sh
@@ -184,12 +197,6 @@ jobs:
           echo "Safeturned directory contents:"
           ls -la /opt/safeturned/ || echo "Directory does not exist"
 
-    - name: Copy Aspire build artifacts
-      run: |
-        # Aspire creates the container image, we just need to copy the compose files
-        echo "Aspire build artifacts are ready in ./publish/aspire/"
-        echo "Deployment package created in ./deploy/"
-
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
       with:
@@ -198,32 +205,20 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          cd /opt/safeturned/deploy
+          cd /opt/safeturned
           ./deploy.sh
 
-    - name: Create Release
-      if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ github.run_number }}
-        release_name: Release v${{ github.run_number }}
-        body: |
-          ## Changes
-          - Built from commit: ${{ github.sha }}
-          - Deployed to server: ${{ secrets.SERVER_HOST }}
-          
-          ## Deployment Status
-          Application has been deployed to your server and is running with docker-compose.
-          
-          ## Cloudflare Tunnel Configuration
-          Your API is now available on port 8080 and ready for Cloudflare Tunnel configuration.
-          
-          ### Cloudflare Tunnel Setup:
-          1. Install cloudflared on your server
-          2. Create a tunnel in Cloudflare dashboard
-          3. Configure the tunnel to point to `localhost:8080`
-          4. Set up your custom domain in Cloudflare
-        draft: false
-        prerelease: false
+    #- name: Create Release
+    #  if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+    #  uses: actions/create-release@v1
+    #  env:
+    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #  with:
+    #    tag_name: v${{ github.run_number }}
+    #    release_name: Release v${{ github.run_number }}
+    #    body: |
+    #      ## Changes
+    #      - Built from commit: ${{ github.sha }}
+    #
+    #    draft: false
+    #    prerelease: false

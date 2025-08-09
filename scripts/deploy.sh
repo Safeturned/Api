@@ -48,14 +48,16 @@ create_backup() {
     fi
 }
 
-# Load Docker image
-load_image() {
-    if [ -f "$DEPLOY_DIR/safeturned-api.tar.gz" ]; then
-        log_info "Loading Docker image..."
-        docker load < "$DEPLOY_DIR/safeturned-api.tar.gz"
-        log_info "Docker image loaded successfully"
+# Pull latest image from GHCR
+pull_latest_image() {
+    log_info "Pulling latest image from GHCR..."
+    
+    # Try to pull the latest image
+    if docker pull ghcr.io/safeturned/api:latest; then
+        log_info "Latest image pulled successfully"
     else
-        log_warn "No Docker image file found, skipping image load"
+        log_warn "Failed to pull latest image from GHCR"
+        log_info "Will use locally available image"
     fi
 }
 
@@ -76,7 +78,7 @@ start_containers() {
     docker-compose pull || log_warn "Failed to pull some images"
     
     # Start with new configuration
-    docker-compose up -d --build
+    docker-compose up -d
     
     log_info "Containers started"
 }
@@ -123,12 +125,15 @@ check_tunnel() {
 test_api() {
     log_info "Testing API endpoint..."
     
+    # Get the port from environment variable
+    local api_port=${SAFETURNED_API_PORT:-8081}
+    
     local max_attempts=30
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
-        if curl -f -s http://localhost:8080/health > /dev/null; then
-            log_info "API is responding correctly"
+        if curl -f -s http://localhost:$api_port/health > /dev/null; then
+            log_info "API is responding correctly on port $api_port"
             return 0
         fi
         
@@ -155,7 +160,7 @@ deploy() {
     
     check_root
     create_backup
-    load_image
+    pull_latest_image
     stop_containers
     start_containers
     
@@ -164,7 +169,7 @@ deploy() {
         check_tunnel
         cleanup
         log_info "Deployment completed successfully!"
-        log_info "Your API is available on port 8080 for Cloudflare Tunnel"
+        log_info "Your API is available on port 8081 for Cloudflare Tunnel"
     else
         log_error "Deployment failed - health checks did not pass"
         exit 1
@@ -216,6 +221,9 @@ status() {
     
     cd "$DEPLOY_DIR"
     
+    # Get the port from environment variable
+    local api_port=${SAFETURNED_API_PORT:-8081}
+    
     echo "=== Docker Containers ==="
     docker-compose ps
     
@@ -231,10 +239,10 @@ status() {
     fi
     
     echo -e "\n=== API Health Check ==="
-    if curl -f -s http://localhost:8080/health > /dev/null; then
-        log_info "API is healthy"
+    if curl -f -s http://localhost:$api_port/health > /dev/null; then
+        log_info "API is healthy on port $api_port"
     else
-        log_error "API is not responding"
+        log_error "API is not responding on port $api_port"
     fi
 }
 
