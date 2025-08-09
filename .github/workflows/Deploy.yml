@@ -97,7 +97,7 @@ jobs:
           safeturned-api:
             image: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ports:
-              - "8080:${SAFETURNED_API_PORT:-80}"  # Expose for Cloudflare Tunnel
+              - "8081:${SAFETURNED_API_PORT:-80}"  # Expose for Cloudflare Tunnel
         EOF
         
         # Create deployment script
@@ -132,7 +132,7 @@ jobs:
         timeout 300 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 5; done' || echo "Warning: Some services may not be healthy"
         
         echo "Deployment completed successfully!"
-        echo "API is available on port 8080 for Cloudflare Tunnel"
+        echo "API is available on port 8081 for Cloudflare Tunnel"
         EOF
         
         chmod +x ./deploy/deploy.sh
