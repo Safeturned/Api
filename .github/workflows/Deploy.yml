@@ -100,12 +100,10 @@ jobs:
       run: |
         mkdir -p ./deploy
         
-        # Copy Aspire generated files
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
-         # Create override to use registry image and expose port
-         cat > ./deploy/docker-compose.override.yaml << 'EOF'
+        cat > ./deploy/docker-compose.override.yaml << 'EOF'
          services:
            safeturned-api:
              image: ghcr.io/safeturned/api:latest
@@ -124,8 +122,7 @@ jobs:
              restart: unless-stopped
          EOF
          
-         # Create nginx configuration
-         cat > ./deploy/nginx.conf << 'EOF'
+        cat > ./deploy/nginx.conf << 'EOF'
          events {
              worker_connections 1024;
          }
@@ -150,24 +147,19 @@ jobs:
          }
          EOF
         
-         # Create deployment script
          cat > ./deploy/deploy.sh << 'EOF'
          #!/bin/bash
          set -e
          
          echo "Starting deployment..."
          
-         # Stop existing containers
          docker compose down || true
          
-         # Pull the latest image from registry
          echo "Pulling latest image from registry..."
          docker pull ghcr.io/safeturned/api:latest || echo "Image pull failed, will build locally"
          
-         # Start with Aspire's docker-compose
          docker compose up -d
          
-         # Wait for services to be healthy
          echo "Waiting for services to be healthy..."
          timeout 180 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 15; echo "Still waiting for healthy services..."; docker compose ps; done' || echo "Warning: Some services may not be healthy"
          
