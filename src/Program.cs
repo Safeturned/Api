@@ -4,7 +4,9 @@ using Hangfire;
 using Hangfire.Console;
 using Hangfire.PostgreSql;
 using HangfireBasicAuthenticationFilter;
+using Microsoft.EntityFrameworkCore;
 using Safeturned.Api;
+using Safeturned.Api.Database;
 using Safeturned.Api.Database.Preparing;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Jobs;
@@ -104,12 +106,21 @@ services.AddHangfire(x => x
         }));
 services.AddHangfireServer();
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(80); // Adjust port if needed
+});
 services.ConfigureHttpClientDefaults(http =>
 {
     http.AddStandardResilienceHandler();
 });
-
 services.AddHttpContextAccessor();
+services.AddControllers();
+
+services.AddDbContext<FilesDbContext>(options =>
+{
+    options.UseNpgsql(dbConnectionString);
+});
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
