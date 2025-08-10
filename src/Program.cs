@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Preparing;
+using Safeturned.Api.ExceptionHandlers;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Jobs;
 using Safeturned.Api.RateLimiting;
@@ -26,6 +27,7 @@ Log.Logger = new LoggerConfiguration()
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
 var config = builder.Configuration;
 var host = builder.Host;
 var services = builder.Services;
@@ -111,10 +113,6 @@ builder.WebHost.ConfigureKestrel(options =>
 {
     options.ListenAnyIP(int.Parse(Environment.GetEnvironmentVariable("SAFETURNED_API_PORT")));
 });
-services.ConfigureHttpClientDefaults(http =>
-{
-    http.AddStandardResilienceHandler();
-});
 services.AddHttpContextAccessor();
 services.AddControllers();
 
@@ -129,6 +127,8 @@ services.AddSerilog(Log.Logger);
 
 var app = builder.Build();
 
+AppDomain.CurrentDomain.UnhandledException += ExceptionHandling.OnUnhandledException;
+
 app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
@@ -141,12 +141,9 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-//app.UseHttpsRedirection();
-
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor |
-                       ForwardedHeaders.XForwardedProto
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
 //app.UseAuthentication();

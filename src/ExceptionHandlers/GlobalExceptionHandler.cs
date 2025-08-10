@@ -1,9 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
-using Safeturned.Api.Helpers;
 
-namespace Safeturned.Api;
+namespace Safeturned.Api.ExceptionHandlers;
 
 internal sealed class GlobalExceptionHandler : IExceptionHandler
 {
