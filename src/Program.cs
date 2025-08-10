@@ -154,14 +154,14 @@ app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error,
 app.UseRateLimiter();
 //app.UseAuthorization();
 
-app.UseHangfireDashboard(config["Hangfire:DashboardPath"] ?? "/hangfire", new DashboardOptions
+app.UseHangfireDashboard(config.GetRequiredString("Hangfire:DashboardPath"), new DashboardOptions
 {
     Authorization =
     [
         new HangfireCustomBasicAuthenticationFilter
         {
-            User = config["Hangfire:User"],
-            Pass = config["Hangfire:Password"],
+            User = config.GetRequiredString("Hangfire:User"),
+            Pass = config.GetRequiredString("Hangfire:Password"),
         }
     ]
 });
