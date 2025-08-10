@@ -109,7 +109,7 @@ services.AddHangfireServer();
 
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenAnyIP(8080);
+    options.ListenAnyIP(int.Parse(Environment.GetEnvironmentVariable("SAFETURNED_API_PORT")));
 });
 services.ConfigureHttpClientDefaults(http =>
 {
