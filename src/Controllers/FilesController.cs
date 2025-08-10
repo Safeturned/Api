@@ -13,7 +13,7 @@ using ILogger = Serilog.ILogger;
 namespace Safeturned.Api.Controllers;
 
 [ApiVersion("1.0")]
-[Route("[controller]")]
+[Route("v{version:apiVersion}/files")]
 [ApiController]
 public class FilesController : ControllerBase
 {
