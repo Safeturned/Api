@@ -13,6 +13,8 @@ using ILogger = Serilog.ILogger;
 namespace Safeturned.Api.Controllers;
 
 [ApiVersion("1.0")]
+[Route("[controller]")]
+[ApiController]
 public class FilesController : ControllerBase
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
