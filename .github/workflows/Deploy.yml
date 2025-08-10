@@ -103,14 +103,6 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
         
-        cat > ./deploy/docker-compose.override.yaml << 'EOF'
-        services:
-          safeturned-api:
-            image: ghcr.io/safeturned/api:latest
-            ports:
-              - "8081:8081"  # Map host port 8081 to container port 8081
-        EOF
-        
         cat > ./deploy/deploy.sh << 'EOF'
         #!/bin/bash
         set -e
@@ -144,7 +136,7 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml,./deploy/docker-compose.override.yaml"
+        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml"
         target: "/opt/safeturned"
 
     - name: Deploy to server
