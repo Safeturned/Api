@@ -54,11 +54,6 @@ jobs:
       run: |
         aspire publish -o ./publish/aspire
         
-    - name: Debug Aspire output
-      run: |
-        echo "=== Aspire publish output ==="
-        ls -la ./publish/aspire/
-        
     - name: Login to GHCR
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin

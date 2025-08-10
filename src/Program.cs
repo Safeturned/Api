@@ -141,11 +141,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
-
 //app.UseAuthentication();
 app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error, more: https://github.com/dotnet/aspnetcore/issues/51888
 app.UseRateLimiter();
