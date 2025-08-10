@@ -118,14 +118,6 @@ jobs:
         
         echo "Deployment completed successfully!"
         EOF
-
-        echo "Deployment package created in ./deploy/"
-        echo "=== Debug: Listing deploy directory contents ==="
-        ls -la ./deploy/
-        echo "=== Debug: Checking if deploy.sh exists and is executable ==="
-        ls -la ./deploy/deploy.sh || echo "deploy.sh not found"
-        echo "=== Debug: File contents of deploy.sh (first 10 lines) ==="
-        head -10 ./deploy/deploy.sh || echo "Cannot read deploy.sh"
         
         chmod +x ./deploy/deploy.sh
 
@@ -154,28 +146,6 @@ jobs:
           
           # Run deployment
           ./deploy.sh
-
-    - name: Verify deployment
-      uses: appleboy/ssh-action@v1
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        port: ${{ secrets.SSH_PORT }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          echo "=== Verifying deployment ==="
-          cd /opt/safeturned
-          
-          echo "=== Container Status ==="
-          docker compose ps
-          
-          echo "=== Port Check ==="
-          netstat -tlnp | grep 8081 || echo "Port 8081 not listening"
-          
-          echo "=== Test API from host ==="
-          curl -f -s http://localhost:8081/health && echo "✅ API is responding" || echo "❌ API not responding"
-          
-          echo "=== Deployment verification completed ==="
 
     #- name: Create Release
     #  if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
