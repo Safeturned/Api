@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost]
+    [EnableCors("AllowAll")] // for testing
     [RequestSizeLimit(1L * 1024 * 1024 * 1024)] // 1 GB
     public async Task<IActionResult> UploadFile(IFormFile file)
     {
@@ -48,7 +50,6 @@ public class FilesController : ControllerBase
 
             var scanStartTime = DateTime.UtcNow;
 
-            // Check if the file can be processed by FileChecker
             await using var stream = file.OpenReadStream();
             var canProcess = await _fileCheckingService.CanProcessFileAsync(stream);
 
@@ -58,27 +59,41 @@ public class FilesController : ControllerBase
                 return BadRequest("File is not a valid .NET assembly that can be processed.");
             }
 
-            // Process the file with FileChecker
             await using var checkStream = file.OpenReadStream();
             var processingContext = await _fileCheckingService.CheckFileAsync(checkStream);
 
-            // Save results to database
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
 
-            var fileData = new FileData
-            {
-                Hash = ComputeFileHash(file),
-                Score = (int)processingContext.Score,
-                FileName = file.FileName,
-                SizeBytes = file.Length,
-                DetectedType = "Assembly",
-                AddDateTime = DateTime.UtcNow,
-                LastScanned = DateTime.UtcNow,
-                TimesScanned = 1
-            };
+            var fileHash = ComputeFileHash(file);
+            var existingFile = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == fileHash);
 
-            await filesDb.Set<FileData>().AddAsync(fileData);
+            FileData fileData;
+            if (existingFile != null)
+            {
+                existingFile.Score = (int)processingContext.Score;
+                existingFile.FileName = file.FileName;
+                existingFile.SizeBytes = file.Length;
+                existingFile.LastScanned = DateTime.UtcNow;
+                existingFile.TimesScanned++;
+                fileData = existingFile;
+            }
+            else
+            {
+                fileData = new FileData
+                {
+                    Hash = fileHash,
+                    Score = (int)processingContext.Score,
+                    FileName = file.FileName,
+                    SizeBytes = file.Length,
+                    DetectedType = "Assembly",
+                    AddDateTime = DateTime.UtcNow,
+                    LastScanned = DateTime.UtcNow,
+                    TimesScanned = 1
+                };
+                await filesDb.Set<FileData>().AddAsync(fileData);
+            }
+
             await filesDb.SaveChangesAsync();
 
             var scanTime = DateTime.UtcNow - scanStartTime;
