@@ -42,7 +42,8 @@ public class FilesController : ControllerBase
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
-
+        if (!string.Equals(Path.GetExtension(file.FileName), ".dll", StringComparison.OrdinalIgnoreCase))
+            return BadRequest("Only .DLL files are allowed.");
         try
         {
             _logger.Information("Processing uploaded file: {FileName}, Size: {Size} bytes",
