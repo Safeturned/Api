@@ -132,13 +132,9 @@ public class FilesController : ControllerBase
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-
-            var fileData = await filesDb.Set<FileData>()
-                .FirstOrDefaultAsync(x => x.Hash == hash);
-
+            var fileData = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == hash);
             if (fileData == null)
                 return NotFound($"File with hash {hash} not found.");
-
             var response = new FileCheckResponse
             {
                 FileName = fileData.FileName ?? "Unknown",
