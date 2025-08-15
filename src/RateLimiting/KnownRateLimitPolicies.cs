@@ -1,6 +1,6 @@
 namespace Safeturned.Api.RateLimiting;
 
-public class KnownRateLimitPolicies
+public static class KnownRateLimitPolicies
 {
-    
+    public const string UploadFile = "UploadFile";
 }

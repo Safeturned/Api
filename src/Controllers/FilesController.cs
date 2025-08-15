@@ -36,6 +36,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
     [RequestSizeLimit(1L * 1024 * 1024 * 1024)] // 1 GB
     public async Task<IActionResult> UploadFile(IFormFile file)
     {

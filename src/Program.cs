@@ -68,14 +68,15 @@ services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    /*options.AddPolicy(KnownRateLimitPolicies., httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
+    options.AddPolicy(KnownRateLimitPolicies.UploadFile, httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
             httpContext.GetIPAddress(),
-            _ => new FixedWindowRateLimiterOptions
+            _ => new SlidingWindowRateLimiterOptions
             {
-                PermitLimit = 100,
-                Window = TimeSpan.FromMinutes(1)
-            }));*/
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 4
+            }));
 });
 
 services.AddOpenApi();
