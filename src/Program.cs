@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Hangfire;
@@ -10,6 +11,7 @@ using Safeturned.Api;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Preparing;
 using Safeturned.Api.ExceptionHandlers;
+using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Jobs;
 using Safeturned.Api.RateLimiting;
@@ -55,9 +57,11 @@ host.UseDefaultServiceProvider((_, options) =>
     options.ValidateScopes = true;
 });
 
+var sentryFilter = new SentryRequestFilter();
 builder.WebHost.UseSentry(x =>
 {
     x.AddExceptionFilterForType<OperationCanceledException>();
+    x.SetBeforeSend((sentryEvent, _) => sentryFilter.Filter(sentryEvent));
 });
 
 services.AddRateLimiter(options =>
