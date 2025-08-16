@@ -118,7 +118,6 @@ public class FilesController : ControllerBase
             if (!forceAnalyze)
             {
                 existingFile.TimesScanned++;
-                existingFile.LastScanned = DateTime.UtcNow;
 
                 await filesDb.SaveChangesAsync();
 
