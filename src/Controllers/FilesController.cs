@@ -108,6 +108,7 @@ public class FilesController : ControllerBase
             var response = new FileCheckResponse
             {
                 FileName = file.FileName,
+                FileHash = fileData.Hash,
                 Score = processingContext.Score,
                 Checked = processingContext.Checked,
                 Message = "File processed successfully",
