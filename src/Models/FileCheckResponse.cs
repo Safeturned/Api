@@ -8,5 +8,6 @@ public class FileCheckResponse
     public bool Checked { get; set; }
     public string Message { get; set; } = string.Empty;
     public DateTime ProcessedAt { get; set; }
+    public DateTime LastScanned { get; set; }
     public long FileSizeBytes { get; set; }
 }

@@ -53,9 +53,8 @@ public class FilesController : ControllerBase
 
             var scanStartTime = DateTime.UtcNow;
 
-            // Step 1: Validate it's a .NET assembly
             bool canProcess;
-            using (var stream = file.OpenReadStream())
+            await using (var stream = file.OpenReadStream())
             {
                 canProcess = await _fileCheckingService.CanProcessFileAsync(stream);
             }
@@ -66,7 +65,6 @@ public class FilesController : ControllerBase
                 return BadRequest("File is not a valid .NET assembly that can be processed.");
             }
 
-            // Step 2: Compute file hash (stream closed after hashing)
             var fileHash = ComputeFileHash(file);
 
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
@@ -112,6 +110,7 @@ public class FilesController : ControllerBase
                     Checked = true,
                     Message = "New file processed successfully",
                     ProcessedAt = DateTime.UtcNow,
+                    LastScanned = fileData.LastScanned,
                     FileSizeBytes = file.Length
                 });
             }
@@ -132,6 +131,7 @@ public class FilesController : ControllerBase
                     Checked = false,
                     Message = "File already uploaded. Skipped analysis.",
                     ProcessedAt = DateTime.UtcNow,
+                    LastScanned = existingFile.LastScanned,
                     FileSizeBytes = existingFile.SizeBytes
                 });
             }
@@ -166,6 +166,7 @@ public class FilesController : ControllerBase
                 Checked = true,
                 Message = "File re-analyzed successfully",
                 ProcessedAt = DateTime.UtcNow,
+                LastScanned = existingFile.LastScanned,
                 FileSizeBytes = existingFile.SizeBytes
             });
         }
