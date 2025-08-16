@@ -22,6 +22,10 @@ public class FilesController : ControllerBase
     private readonly IFileCheckingService _fileCheckingService;
     private readonly IAnalyticsService _analyticsService;
     private readonly ILogger _logger;
+    /// <summary>
+    /// 500 MB
+    /// </summary>
+    private const long MaxFileSize = 500L * 1024 * 1024;
 
     public FilesController(
         IServiceScopeFactory serviceScopeFactory,
@@ -37,7 +41,8 @@ public class FilesController : ControllerBase
 
     [HttpPost]
     [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
-    [RequestSizeLimit(500L * 1024 * 1024)] // 500 MB
+    [RequestSizeLimit(MaxFileSize)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxFileSize)]
     public async Task<IActionResult> UploadFile(IFormFile file, bool forceAnalyze)
     {
         if (file == null || file.Length == 0)
