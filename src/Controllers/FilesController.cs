@@ -67,7 +67,7 @@ public class FilesController : ControllerBase
             if (!canProcess)
             {
                 _logger.Warning("File {FileName} is not a valid .NET assembly", file.FileName);
-                return BadRequest("File is not a valid .NET assembly that can be processed.");
+                return BadRequest("File is not a valid Unturned Plugin that can be processed.");
             }
 
             var fileHash = ComputeFileHash(file);
