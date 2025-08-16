@@ -47,13 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FileChecker\src\ST.Core\ST.Core.csproj" />
-    <ProjectReference Include="..\FileChecker\src\ST.Checking.Abstraction\ST.Checking.Abstraction.csproj" />
-    <ProjectReference Include="..\FileChecker\src\ST.CheckingProcessor.Abstraction\ST.CheckingProcessor.Abstraction.csproj" />
-    <ProjectReference Include="..\FileChecker\src\ST.CheckingProcessor.DnLib\ST.CheckingProcessor.DnLib.csproj" />
-    <ProjectReference Include="..\FileChecker\src\ST.Validating.Abstraction\ST.Validating.Abstraction.csproj" />
-    <ProjectReference Include="..\FileChecker\src\ST.Validating.DnLib\ST.Validating.DnLib.csproj" />
-    <ProjectReference Include="..\FileChecker\src\ST.Initializatializing.Abstraction\ST.Initializatializing.Abstraction.csproj" />
+    <ProjectReference Include="..\FileChecker\src\Safeturned.FileChecker\Safeturned.FileChecker.csproj" />
     <ProjectReference Include="..\Safeturned.ServiceDefaults\Safeturned.ServiceDefaults.csproj" />
   </ItemGroup>
 

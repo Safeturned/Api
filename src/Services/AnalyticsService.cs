@@ -1,8 +1,8 @@
-using Safeturned.Api.Database;
-using Safeturned.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
+using Safeturned.Api.Models;
 using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Services;

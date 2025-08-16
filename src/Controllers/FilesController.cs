@@ -1,14 +1,13 @@
+using System.Security.Cryptography;
 using Asp.Versioning;
-using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
-using Safeturned.Api.Services;
 using Safeturned.Api.Models;
 using Safeturned.Api.RateLimiting;
-using ST.CheckingProcessor.Abstraction;
+using Safeturned.Api.Services;
 using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Controllers;
@@ -181,7 +180,7 @@ public class FilesController : ControllerBase
 
     private static string ComputeFileHash(IFormFile file)
     {
-        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        using var sha256 = SHA256.Create();
         using var stream = file.OpenReadStream();
         var hashBytes = sha256.ComputeHash(stream);
         return Convert.ToBase64String(hashBytes);
