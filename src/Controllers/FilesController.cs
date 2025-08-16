@@ -8,6 +8,7 @@ using Safeturned.Api.Database.Models;
 using Safeturned.Api.Models;
 using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Services;
+using Safeturned.FileChecker.Modules;
 using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Controllers;
@@ -36,13 +37,15 @@ public class FilesController : ControllerBase
 
     [HttpPost]
     [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
-    [RequestSizeLimit(1L * 1024 * 1024 * 1024)] // 1 GB
-    public async Task<IActionResult> UploadFile(IFormFile file)
+    [RequestSizeLimit(500L * 1024 * 1024)] // 500 MB
+    public async Task<IActionResult> UploadFile(IFormFile file, bool forceAnalyze)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
+
         if (!string.Equals(Path.GetExtension(file.FileName), ".dll", StringComparison.OrdinalIgnoreCase))
             return BadRequest("Only .DLL files are allowed.");
+
         try
         {
             _logger.Information("Processing uploaded file: {FileName}, Size: {Size} bytes",
@@ -50,8 +53,12 @@ public class FilesController : ControllerBase
 
             var scanStartTime = DateTime.UtcNow;
 
-            await using var stream = file.OpenReadStream();
-            var canProcess = await _fileCheckingService.CanProcessFileAsync(stream);
+            // Step 1: Validate it's a .NET assembly
+            bool canProcess;
+            using (var stream = file.OpenReadStream())
+            {
+                canProcess = await _fileCheckingService.CanProcessFileAsync(stream);
+            }
 
             if (!canProcess)
             {
@@ -59,27 +66,21 @@ public class FilesController : ControllerBase
                 return BadRequest("File is not a valid .NET assembly that can be processed.");
             }
 
-            await using var checkStream = file.OpenReadStream();
-            var processingContext = await _fileCheckingService.CheckFileAsync(checkStream);
+            // Step 2: Compute file hash (stream closed after hashing)
+            var fileHash = ComputeFileHash(file);
 
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-
-            var fileHash = ComputeFileHash(file);
             var existingFile = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == fileHash);
-
             FileData fileData;
-            if (existingFile != null)
+            if (existingFile == null)
             {
-                existingFile.Score = (int)processingContext.Score;
-                existingFile.FileName = file.FileName;
-                existingFile.SizeBytes = file.Length;
-                existingFile.LastScanned = DateTime.UtcNow;
-                existingFile.TimesScanned++;
-                fileData = existingFile;
-            }
-            else
-            {
+                IModuleProcessingContext processingContext;
+                await using (var checkStream = file.OpenReadStream())
+                {
+                    processingContext = await _fileCheckingService.CheckFileAsync(checkStream);
+                }
+
                 fileData = new FileData
                 {
                     Hash = fileHash,
@@ -91,39 +92,91 @@ public class FilesController : ControllerBase
                     LastScanned = DateTime.UtcNow,
                     TimesScanned = 1
                 };
+
                 await filesDb.Set<FileData>().AddAsync(fileData);
+                await filesDb.SaveChangesAsync();
+
+                var scanTime = DateTime.UtcNow - scanStartTime;
+                var isThreat = processingContext.Score >= 50;
+
+                await _analyticsService.RecordScanAsync(file.FileName, processingContext.Score, isThreat, scanTime);
+
+                _logger.Information("New file {FileName} processed successfully. Score: {Score}, Time: {ScanTime}ms",
+                    file.FileName, processingContext.Score, scanTime.TotalMilliseconds);
+
+                return Ok(new FileCheckResponse
+                {
+                    FileName = file.FileName,
+                    FileHash = fileData.Hash,
+                    Score = processingContext.Score,
+                    Checked = true,
+                    Message = "New file processed successfully",
+                    ProcessedAt = DateTime.UtcNow,
+                    FileSizeBytes = file.Length
+                });
             }
+            if (!forceAnalyze)
+            {
+                existingFile.TimesScanned++;
+                existingFile.LastScanned = DateTime.UtcNow;
+
+                await filesDb.SaveChangesAsync();
+
+                _logger.Information("File {FileName} already exists. Returning existing record without re-analysis.",
+                    file.FileName);
+
+                return Ok(new FileCheckResponse
+                {
+                    FileName = existingFile.FileName,
+                    FileHash = existingFile.Hash,
+                    Score = existingFile.Score,
+                    Checked = false,
+                    Message = "File already uploaded. Skipped analysis.",
+                    ProcessedAt = DateTime.UtcNow,
+                    FileSizeBytes = existingFile.SizeBytes
+                });
+            }
+
+            IModuleProcessingContext reProcessingContext;
+            await using (var checkStream = file.OpenReadStream())
+            {
+                reProcessingContext = await _fileCheckingService.CheckFileAsync(checkStream);
+            }
+
+            existingFile.Score = (int)reProcessingContext.Score;
+            existingFile.FileName = file.FileName;
+            existingFile.SizeBytes = file.Length;
+            existingFile.LastScanned = DateTime.UtcNow;
+            existingFile.TimesScanned++;
 
             await filesDb.SaveChangesAsync();
 
-            var scanTime = DateTime.UtcNow - scanStartTime;
-            var isThreat = processingContext.Score >= 50; // Consider scores >= 50 as threats
+            var reScanTime = DateTime.UtcNow - scanStartTime;
+            var reIsThreat = reProcessingContext.Score >= 50;
 
-            // Record analytics
-            await _analyticsService.RecordScanAsync(file.FileName, processingContext.Score, isThreat, scanTime);
+            await _analyticsService.RecordScanAsync(file.FileName, reProcessingContext.Score, reIsThreat, reScanTime);
 
-            _logger.Information("File {FileName} processed successfully. Score: {Score}, Time: {ScanTime}ms",
-                file.FileName, processingContext.Score, scanTime.TotalMilliseconds);
+            _logger.Information("File {FileName} re-analyzed successfully. Score: {Score}, Time: {ScanTime}ms",
+                file.FileName, reProcessingContext.Score, reScanTime.TotalMilliseconds);
 
-            var response = new FileCheckResponse
+            return Ok(new FileCheckResponse
             {
-                FileName = file.FileName,
-                FileHash = fileData.Hash,
-                Score = processingContext.Score,
-                Checked = processingContext.Checked,
-                Message = "File processed successfully",
+                FileName = existingFile.FileName,
+                FileHash = existingFile.Hash,
+                Score = reProcessingContext.Score,
+                Checked = true,
+                Message = "File re-analyzed successfully",
                 ProcessedAt = DateTime.UtcNow,
-                FileSizeBytes = file.Length
-            };
-
-            return Ok(response);
+                FileSizeBytes = existingFile.SizeBytes
+            });
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "Error processing file {FileName}", file.FileName);
-            throw; // Let the GlobalExceptionHandler capture with Sentry
+            throw; // Let GlobalExceptionHandler handle it
         }
     }
+
 
     [HttpGet("{hash}")]
     public async Task<IActionResult> GetFileResult(string hash)
@@ -138,6 +191,7 @@ public class FilesController : ControllerBase
             var response = new FileCheckResponse
             {
                 FileName = fileData.FileName ?? "Unknown",
+                FileHash = fileData.Hash,
                 Score = fileData.Score,
                 Checked = true, // If it's in the database, it was checked
                 Message = "File retrieved from database",
