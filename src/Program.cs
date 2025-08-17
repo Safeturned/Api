@@ -95,6 +95,16 @@ services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 SegmentsPerWindow = 4
             }));
+
+    options.AddPolicy(KnownRateLimitPolicies.AnalyticsWithDateRange, httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            httpContext.GetIPAddress(),
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 4
+            }));
 });
 
 services.AddOpenApi();

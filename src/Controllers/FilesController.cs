@@ -48,15 +48,6 @@ public class FilesController : ControllerBase
     [RequestFormLimits(MultipartBodyLengthLimit = MaxFileSize)]
     public async Task<IActionResult> UploadFile(IFormFile file, bool forceAnalyze)
     {
-        // Log the IP being used for rate limiting
-        var clientIP = HttpContext.GetIPAddress();
-        var directIP = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].ToString();
-        var cfIP = HttpContext.Request.Headers["CF-CONNECTING-IP"].ToString();
-
-        _logger.Information("Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}",
-            clientIP, directIP, forwardedFor, cfIP);
-
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
 
@@ -194,20 +185,10 @@ public class FilesController : ControllerBase
         }
     }
 
-
     [HttpGet("{hash}")]
     [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
     public async Task<IActionResult> GetFileResult(string hash)
     {
-        // Log the IP being used for rate limiting
-        var clientIP = HttpContext.GetIPAddress();
-        var directIP = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].ToString();
-        var cfIP = HttpContext.Request.Headers["CF-CONNECTING-IP"].ToString();
-
-        _logger.Information("GetFileResult - Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}",
-            clientIP, directIP, forwardedFor, cfIP);
-
         try
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
@@ -236,36 +217,34 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("analytics")]
-    [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
-    public async Task<IActionResult> GetAnalytics([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    public async Task<IActionResult> GetAnalytics()
     {
-        // Log the IP being used for rate limiting
-        var clientIP = HttpContext.GetIPAddress();
-        var directIP = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].ToString();
-        var cfIP = HttpContext.Request.Headers["CF-CONNECTING-IP"].ToString();
-
-        _logger.Information("GetAnalytics - Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}",
-            clientIP, directIP, forwardedFor, cfIP);
-
         try
         {
-            AnalyticsData analytics;
-
-            if (from.HasValue && to.HasValue)
-            {
-                analytics = await _analyticsService.GetAnalyticsAsync(from.Value, to.Value);
-            }
-            else
-            {
-                analytics = await _analyticsService.GetAnalyticsAsync();
-            }
-
+            // No rate limiting for cached data
+            var analytics = await _analyticsService.GetAnalyticsAsync();
             return Ok(analytics);
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "Error retrieving analytics");
+            throw; // Let the GlobalExceptionHandler capture with Sentry
+        }
+    }
+
+    [HttpGet("analytics/range")]
+    [EnableRateLimiting(KnownRateLimitPolicies.AnalyticsWithDateRange)]
+    public async Task<IActionResult> GetAnalyticsWithDateRange([FromQuery] DateTime from, [FromQuery] DateTime to)
+    {
+        try
+        {
+            // Rate limiting applied for date range queries
+            var analytics = await _analyticsService.GetAnalyticsAsync(from, to);
+            return Ok(analytics);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error retrieving analytics with date range");
             throw; // Let the GlobalExceptionHandler capture with Sentry
         }
     }
