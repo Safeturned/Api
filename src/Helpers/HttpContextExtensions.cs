@@ -41,7 +41,8 @@ public static class HttpContextExtensions
             var addresses = ipAddress.Split(',');
             if (addresses.Length != 0)
             {
-                return addresses.Last();
+                // Take the FIRST IP (original client IP), not the last
+                return addresses[0].Trim();
             }
         }
 
