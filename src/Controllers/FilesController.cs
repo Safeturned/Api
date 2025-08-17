@@ -48,15 +48,6 @@ public class FilesController : ControllerBase
     [RequestFormLimits(MultipartBodyLengthLimit = MaxFileSize)]
     public async Task<IActionResult> UploadFile(IFormFile file, bool forceAnalyze)
     {
-        // Temporary debug logging to check IP detection
-        var clientIP = HttpContext.GetIPAddress();
-        var directIP = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].ToString();
-        var cfIP = HttpContext.Request.Headers["CF-CONNECTING-IP"].ToString();
-
-        _logger.Information("DEBUG - Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}",
-            clientIP, directIP, forwardedFor, cfIP);
-
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
 
