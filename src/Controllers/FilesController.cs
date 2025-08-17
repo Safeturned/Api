@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Filters;
+using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
 using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Services;
@@ -52,8 +53,8 @@ public class FilesController : ControllerBase
         var directIP = HttpContext.Connection.RemoteIpAddress?.ToString();
         var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].ToString();
         var cfIP = HttpContext.Request.Headers["CF-CONNECTING-IP"].ToString();
-        
-        _logger.Information("Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}", 
+
+        _logger.Information("Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}",
             clientIP, directIP, forwardedFor, cfIP);
 
         if (file == null || file.Length == 0)
@@ -203,8 +204,8 @@ public class FilesController : ControllerBase
         var directIP = HttpContext.Connection.RemoteIpAddress?.ToString();
         var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].ToString();
         var cfIP = HttpContext.Request.Headers["CF-CONNECTING-IP"].ToString();
-        
-        _logger.Information("GetFileResult - Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}", 
+
+        _logger.Information("GetFileResult - Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}",
             clientIP, directIP, forwardedFor, cfIP);
 
         try
@@ -243,8 +244,8 @@ public class FilesController : ControllerBase
         var directIP = HttpContext.Connection.RemoteIpAddress?.ToString();
         var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].ToString();
         var cfIP = HttpContext.Request.Headers["CF-CONNECTING-IP"].ToString();
-        
-        _logger.Information("GetAnalytics - Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}", 
+
+        _logger.Information("GetAnalytics - Rate limiting IP: {ClientIP}, Direct IP: {DirectIP}, X-Forwarded-For: {ForwardedFor}, CF-IP: {CFIP}",
             clientIP, directIP, forwardedFor, cfIP);
 
         try
