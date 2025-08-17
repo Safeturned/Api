@@ -31,10 +31,10 @@ public static class HttpContextExtensions
     public static string GetIPAddress(this HttpContext source)
     {
         // Check X-Forwarded-For first (more reliable for getting real client IP)
-        var ipAddress = source.GetServerVariable("HTTP_X_FORWARDED_FOR");
-        if (string.IsNullOrEmpty(ipAddress) == false)
+        var forwardedFor = source.Request.Headers["X-Forwarded-For"].ToString();
+        if (!string.IsNullOrEmpty(forwardedFor))
         {
-            var addresses = ipAddress.Split(',');
+            var addresses = forwardedFor.Split(',');
             if (addresses.Length != 0)
             {
                 // Take the FIRST IP (original client IP), not the last
