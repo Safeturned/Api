@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
+using Safeturned.Api.Filters;
 using Safeturned.Api.Models;
 using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Services;
@@ -16,6 +17,7 @@ namespace Safeturned.Api.Controllers;
 [ApiVersion("1.0")]
 [Route("v{version:apiVersion}/files")]
 [ApiController]
+[ApiSecurityFilter]
 public class FilesController : ControllerBase
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
@@ -184,6 +186,7 @@ public class FilesController : ControllerBase
 
 
     [HttpGet("{hash}")]
+    [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
     public async Task<IActionResult> GetFileResult(string hash)
     {
         try
@@ -214,6 +217,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("analytics")]
+    [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
     public async Task<IActionResult> GetAnalytics([FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         try

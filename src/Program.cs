@@ -14,6 +14,7 @@ using Safeturned.Api.ExceptionHandlers;
 using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Jobs;
+using Safeturned.Api.Models;
 using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Scripts.Files;
 using Safeturned.Api.Services;
@@ -42,6 +43,23 @@ var loggerFactory = new ServiceCollection()
     .BuildServiceProvider()
     .GetRequiredService<ILoggerFactory>();
 #pragma warning restore ASP0000
+
+services.Configure<SecuritySettings>(config.GetSection("Security"));
+
+var securitySettings = config.GetSection("Security").Get<SecuritySettings>();
+if (securitySettings?.AllowedOrigins != null && securitySettings.AllowedOrigins.Length > 0)
+{
+    services.AddCors(options =>
+    {
+        options.AddPolicy("RestrictedCors", policy =>
+        {
+            policy.WithOrigins(securitySettings.AllowedOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        });
+    });
+}
 
 var dbConnectionString = config.GetRequiredConnectionString("safeturned-db");
 
@@ -148,6 +166,12 @@ if (app.Environment.IsDevelopment())
 
 //app.UseAuthentication();
 app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error, more: https://github.com/dotnet/aspnetcore/issues/51888
+
+if (securitySettings?.AllowedOrigins != null && securitySettings.AllowedOrigins.Length > 0)
+{
+    app.UseCors("RestrictedCors");
+}
+
 app.UseRateLimiter();
 //app.UseAuthorization();
 
