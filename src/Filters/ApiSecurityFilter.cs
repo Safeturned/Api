@@ -66,8 +66,7 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
         var hostHeader = context.HttpContext.Request.Headers.Host.ToString();
         if (!string.IsNullOrEmpty(hostHeader))
         {
-            return allowedOrigins.Any(allowedOrigin =>
-                hostHeader.Equals(allowedOrigin.Replace("https://", "").Replace("http://", ""), StringComparison.OrdinalIgnoreCase));
+            return allowedOrigins.Any(allowedOrigin => hostHeader.Equals(allowedOrigin.Replace("https://", "").Replace("http://", ""), StringComparison.OrdinalIgnoreCase));
         }
         return false;
     }
