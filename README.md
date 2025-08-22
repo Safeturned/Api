@@ -18,7 +18,7 @@ This API processes Unturned plugin files (.dll) and scans them for:
 - **Logging**: [Serilog](https://serilog.net/)
 - **Error Tracking**: [Sentry](https://sentry.io/)
 - **API Documentation**: Swagger/OpenAPI
-- **Deployment**: Aspire generates Docker Compose for deployment
+- **Deployment**: GitHub Actions builds with Aspire, pushes to GHCR, and deploys via SSH, we do not make it via GH Release for simple!
 
 ## Quick Start
 
@@ -55,6 +55,20 @@ dotnet run --project Safeturned.AppHost
 # Or use the generated docker-compose.yaml directly
 docker compose up -d
 ```
+
+### Production Deployment
+
+The API is automatically deployed when you create a version tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This triggers:
+1. Build - Aspire publishes the application
+2. Container - Docker image is built and pushed to GitHub Container Registry
+3. Deploy - Files are copied to server and deployed via SSH
 
 ## API Endpoints
 
