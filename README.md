@@ -12,10 +12,11 @@ This API processes Unturned plugin files (.dll) and scans them for:
 
 ## Tech Stack
 
-- **Framework**: ASP.NET Core 9.0 with Aspire
-- **Database**: PostgreSQL with dbup migrations
-- **Background Jobs**: Hangfire
-- **Logging**: Serilog
+- **Framework**: ASP.NET Core 9.0 with [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
+- **Database**: PostgreSQL with [dbup](https://dbup.readthedocs.io/) migrations
+- **Background Jobs**: [Hangfire](https://www.hangfire.io/)
+- **Logging**: [Serilog](https://serilog.net/)
+- **Error Tracking**: [Sentry](https://sentry.io/)
 - **API Documentation**: Swagger/OpenAPI
 - **Deployment**: Aspire generates Docker Compose for deployment
 
