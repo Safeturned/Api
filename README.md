@@ -77,7 +77,7 @@ This triggers:
 - `GET /v1/analytics` - Get analytics data
 - `GET /health` - Health check endpoint
 
-**Note**: API requires authentication via API key and origin validation.
+**Note**: API requires authentication via API key and origin validation. In the short/long term future, we plan to make the API publicly available for everyone.
 
 ## Project Structure
 
