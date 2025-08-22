@@ -2,8 +2,14 @@ name: Deploy
 
 on:
   push:
-    branches: [ master ]
+    tags:
+      - '*.*.*'  # Triggers on version tags like 1.0.0, 2.1.3, etc.
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
 
 env:
   DOCKER_REGISTRY: ghcr.io
@@ -17,6 +23,44 @@ jobs:
       packages: write
     
     steps:
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
+        
+        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid SemVer format: $VERSION"
+          exit 1
+        fi
+        
+        MAJOR=$(echo $VERSION | cut -d. -f1)
+        MINOR=$(echo $VERSION | cut -d. -f2)
+        PATCH=$(echo $VERSION | cut -d. -f3)
+        
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "major=$MAJOR" >> $GITHUB_OUTPUT
+        echo "minor=$MINOR" >> $GITHUB_OUTPUT
+        echo "patch=$PATCH" >> $GITHUB_OUTPUT
+        echo "full_version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Determine branch and environment
+      id: branch
+      run: |
+        if [ "${{ github.ref }}" = "refs/heads/master" ] || [ "${{ github.ref }}" = "refs/heads/master" ]; then
+          echo "branch=master" >> $GITHUB_OUTPUT
+          echo "environment=production" >> $GITHUB_OUTPUT
+        elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
+          echo "branch=dev" >> $GITHUB_OUTPUT
+          echo "environment=development" >> $GITHUB_OUTPUT
+        else
+          echo "branch=master" >> $GITHUB_OUTPUT
+          echo "environment=production" >> $GITHUB_OUTPUT
+        fi
+
     - name: Checkout code with submodules
       uses: actions/checkout@v4
       with:
@@ -60,6 +104,9 @@ jobs:
 
     - name: Find and tag Docker image
       run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        BRANCH="${{ steps.branch.outputs.branch }}"
+        
         # Look for the built image with various possible names
         BUILT_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "(safeturned-api|safeturned-api)" | head -n 1)
         
@@ -78,21 +125,28 @@ jobs:
         
         echo "Found built image: $BUILT_IMAGE"
         
-        # Tag for GHCR
-        docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:latest"
-        docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:v${{ github.run_number }}"
+        # Tag for GHCR with version and branch
+        docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:v${VERSION}"
+        docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:${BRANCH}"
         
         echo "✅ Image tagged successfully"
 
     - name: Push Docker image
       run: |
-        # Push both latest and versioned tags
-        docker push "ghcr.io/safeturned/api:latest"
-        docker push "ghcr.io/safeturned/api:v${{ github.run_number }}"
+        VERSION="${{ steps.version.outputs.version }}"
+        BRANCH="${{ steps.branch.outputs.branch }}"
+        
+        # Push both version and branch tags
+        docker push "ghcr.io/safeturned/api:v${VERSION}"
+        docker push "ghcr.io/safeturned/api:${BRANCH}"
         echo "✅ Images pushed successfully"
 
     - name: Create deployment package
       run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        BRANCH="${{ steps.branch.outputs.branch }}"
+        ENVIRONMENT="${{ steps.branch.outputs.environment }}"
+        
         mkdir -p ./deploy
         
         cp ./publish/aspire/docker-compose.yaml ./deploy/
@@ -101,13 +155,19 @@ jobs:
         cat > ./deploy/deploy.sh << 'EOF'
         #!/bin/bash
         set -e
-        
-        echo "Starting deployment..."
+        VERSION="$1"
+        BRANCH="$2"
+        ENVIRONMENT="$3"
+        if [ -z "$VERSION" ] || [ -z "$BRANCH" ] || [ -z "$ENVIRONMENT" ]; then
+            echo "Usage: $0 <version> <branch> <environment>"
+            exit 1
+        fi
+        echo "Deploying version: $VERSION, branch: $BRANCH, environment: $ENVIRONMENT"
         
         docker compose down || true
         
-        echo "Pulling latest image from registry..."
-        docker pull ghcr.io/safeturned/api:latest || echo "Image pull failed, will build locally"
+        echo "Pulling image from registry..."
+        docker pull ghcr.io/safeturned/api:v${VERSION} || echo "Image pull failed, will build locally"
         
         docker compose up -d
         
@@ -134,13 +194,11 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          echo "=== Starting deployment ==="
-          
-          # Go to the deploy directory where files are copied
+          echo "=== Starting API deployment ==="
           cd /opt/safeturned/deploy
-          
-          # Run deployment
-          ./deploy.sh
+          chmod +x deploy.sh
+          ./deploy.sh "${{ steps.version.outputs.version }}" "${{ steps.branch.outputs.branch }}" "${{ steps.branch.outputs.environment }}"
+          echo "=== API deployment completed ==="
 
     #- name: Create Release
     #  if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
