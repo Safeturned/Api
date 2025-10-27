@@ -167,8 +167,15 @@ jobs:
         fi
         echo "Deploying version: $VERSION, branch: $BRANCH, environment: $ENVIRONMENT"
         
-        # Set environment variables for docker compose
-        export SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}
+        # Update .env file with environment variables for docker compose
+        # Replace or add SAFETURNED_API_IMAGE line
+        if grep -q "^SAFETURNED_API_IMAGE=" .env 2>/dev/null; then
+            # Replace existing line
+            sed -i "s|^SAFETURNED_API_IMAGE=.*|SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}|" .env
+        else
+            # Add new line
+            echo "SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}" >> .env
+        fi
         
         docker compose down || true
         
