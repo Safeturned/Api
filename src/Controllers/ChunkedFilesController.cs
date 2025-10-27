@@ -47,17 +47,17 @@ public class ChunkedFilesController : ControllerBase
         if (request.FileSizeBytes <= 0)
             return BadRequest("FileSizeBytes must be greater than 0.");
 
-        var uploadLimits = new UploadLimitsConfiguration();
-        _configuration.GetSection("UploadLimits").Bind(uploadLimits);
+        var maxFileSizeBytes = _configuration.GetValue<long>("UploadLimits:MaxFileSizeBytes");
+        var maxChunksPerSession = _configuration.GetValue<int>("UploadLimits:MaxChunksPerSession");
 
-        if (request.FileSizeBytes > uploadLimits.MaxFileSizeBytes)
-            return BadRequest($"File size exceeds maximum allowed size of {uploadLimits.MaxFileSizeBytes / (1024 * 1024)}MB.");
+        if (request.FileSizeBytes > maxFileSizeBytes)
+            return BadRequest($"File size exceeds maximum allowed size of {maxFileSizeBytes / (1024 * 1024)}MB.");
 
         if (request.TotalChunks <= 0)
             return BadRequest("TotalChunks must be greater than 0.");
 
-        if (request.TotalChunks > uploadLimits.MaxChunksPerSession)
-            return BadRequest($"Total chunks exceeds maximum allowed chunks of {uploadLimits.MaxChunksPerSession}.");
+        if (request.TotalChunks > maxChunksPerSession)
+            return BadRequest($"Total chunks exceeds maximum allowed chunks of {maxChunksPerSession}.");
 
         if (string.IsNullOrEmpty(request.FileHash))
             return BadRequest("FileHash is required.");

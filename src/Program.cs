@@ -151,15 +151,34 @@ services.AddHangfire(x => x
         }));
 services.AddHangfireServer();
 
+var maxChunkSizeBytes = config.GetValue<int>("UploadLimits:MaxChunkSizeBytes");
+var maxFileSizeBytes = config.GetValue<long>("UploadLimits:MaxFileSizeBytes");
+var maxChunksPerSession = config.GetValue<int>("UploadLimits:MaxChunksPerSession");
+var defaultChunkSizeBytes = config.GetValue<int>("UploadLimits:DefaultChunkSizeBytes");
+var fileBufferSize = config.GetValue<int>("UploadLimits:FileBufferSize");
+var sessionExpirationHours = config.GetValue<int>("UploadLimits:SessionExpirationHours");
+var maxConcurrentSessionsPerIp = config.GetValue<int>("UploadLimits:MaxConcurrentSessionsPerIp");
+
+if (maxChunkSizeBytes <= 0)
+    throw new InvalidOperationException("UploadLimits:MaxChunkSizeBytes must be configured and greater than 0");
+if (maxFileSizeBytes <= 0)
+    throw new InvalidOperationException("UploadLimits:MaxFileSizeBytes must be configured and greater than 0");
+if (maxChunksPerSession <= 0)
+    throw new InvalidOperationException("UploadLimits:MaxChunksPerSession must be configured and greater than 0");
+if (defaultChunkSizeBytes <= 0)
+    throw new InvalidOperationException("UploadLimits:DefaultChunkSizeBytes must be configured and greater than 0");
+if (fileBufferSize <= 0)
+    throw new InvalidOperationException("UploadLimits:FileBufferSize must be configured and greater than 0");
+if (sessionExpirationHours <= 0)
+    throw new InvalidOperationException("UploadLimits:SessionExpirationHours must be configured and greater than 0");
+if (maxConcurrentSessionsPerIp <= 0)
+    throw new InvalidOperationException("UploadLimits:MaxConcurrentSessionsPerIp must be configured and greater than 0");
+
 var port = Environment.GetEnvironmentVariable("SAFETURNED_API_PORT") ?? throw new InvalidOperationException("API port is not set.");
-
-var uploadLimits = new UploadLimitsConfiguration();
-config.GetSection("UploadLimits").Bind(uploadLimits);
-
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.ListenAnyIP(int.Parse(port));
-    options.Limits.MaxRequestBodySize = uploadLimits.MaxChunkSizeBytes;
+    options.Limits.MaxRequestBodySize = maxChunkSizeBytes;
 });
 
 services.AddHttpContextAccessor();
@@ -167,7 +186,7 @@ services.AddControllers();
 
 services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = uploadLimits.MaxChunkSizeBytes;
+    options.MultipartBodyLengthLimit = maxChunkSizeBytes;
     options.ValueLengthLimit = int.MaxValue;
     options.ValueCountLimit = int.MaxValue;
     options.KeyLengthLimit = int.MaxValue;
