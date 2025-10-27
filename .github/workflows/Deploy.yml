@@ -167,6 +167,9 @@ jobs:
         fi
         echo "Deploying version: $VERSION, branch: $BRANCH, environment: $ENVIRONMENT"
         
+        # Set environment variables for docker compose
+        export SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}
+        
         docker compose down || true
         
         echo "Pulling image from registry..."
