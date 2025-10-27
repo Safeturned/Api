@@ -7,7 +7,8 @@
       "launchBrowser": false,
       "applicationUrl": "http://localhost:5166",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "SAFETURNED_API_PORT": "5000"
       }
     },
     "https": {
@@ -16,7 +17,8 @@
       "launchBrowser": false,
       "applicationUrl": "https://localhost:7221;http://localhost:5166",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "SAFETURNED_API_PORT": "5000"
       }
     }
   }

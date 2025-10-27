@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database.Models;
-using Safeturned.Api.Services;
 
 namespace Safeturned.Api.Database;
 
@@ -17,4 +16,6 @@ public class FilesDbContext : DbContext
     private DbSet<FileData> Files { get; set; }
     [SuppressMessage("ReSharper", "UnusedMember.Local", MessageId = "Used externally by Set<T>()")]
     private DbSet<ScanRecord> Scans { get; set; }
+    [SuppressMessage("ReSharper", "UnusedMember.Local", MessageId = "Used externally by Set<T>()")]
+    private DbSet<ChunkUploadSession> ChunkUploadSessions { get; set; }
 }

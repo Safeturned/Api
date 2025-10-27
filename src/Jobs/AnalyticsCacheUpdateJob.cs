@@ -21,7 +21,7 @@ public class AnalyticsCacheUpdateJob
         {
             context.WriteLine("Starting analytics cache update");
             
-            await _analyticsService.UpdateAnalyticsCacheAsync();
+            await _analyticsService.UpdateAnalyticsCacheAsync(cancellationToken);
             
             context.WriteLine("Analytics cache updated successfully");
         }

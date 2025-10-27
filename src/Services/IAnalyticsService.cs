@@ -7,20 +7,20 @@ public interface IAnalyticsService
     /// <summary>
     /// Records a file scan with its results
     /// </summary>
-    Task RecordScanAsync(string fileName, float score, bool isThreat, TimeSpan scanTime);
+    Task RecordScanAsync(string fileName, float score, bool isThreat, TimeSpan scanTime, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Gets the current analytics data
     /// </summary>
-    Task<AnalyticsData> GetAnalyticsAsync();
+    Task<AnalyticsData> GetAnalyticsAsync(CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Gets analytics for a specific time period
     /// </summary>
-    Task<AnalyticsData> GetAnalyticsAsync(DateTime from, DateTime to);
+    Task<AnalyticsData> GetAnalyticsAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Updates the analytics cache
     /// </summary>
-    Task UpdateAnalyticsCacheAsync();
+    Task UpdateAnalyticsCacheAsync(CancellationToken cancellationToken = default);
 } 

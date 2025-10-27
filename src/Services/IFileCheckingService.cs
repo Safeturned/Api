@@ -8,13 +8,15 @@ public interface IFileCheckingService
     /// Checks a file stream and returns the processing context with results
     /// </summary>
     /// <param name="fileStream">The file stream to check</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The processing context containing the check results</returns>
-    Task<IModuleProcessingContext> CheckFileAsync(Stream fileStream);
+    Task<IModuleProcessingContext> CheckFileAsync(Stream fileStream, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Checks if the file is a valid .NET assembly that can be processed
     /// </summary>
     /// <param name="fileStream">The file stream to validate</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if the file can be processed, false otherwise</returns>
-    Task<bool> CanProcessFileAsync(Stream fileStream);
+    Task<bool> CanProcessFileAsync(Stream fileStream, CancellationToken cancellationToken = default);
 }

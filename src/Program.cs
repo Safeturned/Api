@@ -1,13 +1,11 @@
-using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Hangfire;
 using Hangfire.Console;
 using Hangfire.PostgreSql;
 using HangfireBasicAuthenticationFilter;
-using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
-using Safeturned.Api;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Preparing;
 using Safeturned.Api.ExceptionHandlers;
@@ -105,11 +103,22 @@ services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 SegmentsPerWindow = 4
             }));
+
+    options.AddPolicy(KnownRateLimitPolicies.ChunkedUpload, httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            httpContext.GetIPAddress(),
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 50,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 4
+            }));
 });
 
 services.AddOpenApi();
 
 services.AddScoped<IFileCheckingService, FileCheckingService>();
+services.AddScoped<IChunkStorageService, ChunkStorageService>();
 
 services.AddMemoryCache();
 services.AddScoped<IAnalyticsService, AnalyticsService>();
@@ -142,12 +151,27 @@ services.AddHangfire(x => x
         }));
 services.AddHangfireServer();
 
+var port = Environment.GetEnvironmentVariable("SAFETURNED_API_PORT") ?? throw new InvalidOperationException("API port is not set.");
+
+var uploadLimits = new UploadLimitsConfiguration();
+config.GetSection("UploadLimits").Bind(uploadLimits);
+
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenAnyIP(int.Parse(Environment.GetEnvironmentVariable("SAFETURNED_API_PORT")));
+    options.ListenAnyIP(int.Parse(port));
+    options.Limits.MaxRequestBodySize = uploadLimits.MaxChunkSizeBytes;
 });
+
 services.AddHttpContextAccessor();
 services.AddControllers();
+
+services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = uploadLimits.MaxChunkSizeBytes;
+    options.ValueLengthLimit = int.MaxValue;
+    options.ValueCountLimit = int.MaxValue;
+    options.KeyLengthLimit = int.MaxValue;
+});
 
 services.AddDbContext<FilesDbContext>(options =>
 {
@@ -206,5 +230,10 @@ recurringJobManager.AddOrUpdate<AnalyticsCacheUpdateJob>(
     "analytics-cache",
     job => job.UpdateAnalyticsCache(null!, CancellationToken.None),
     "*/5 * * * *");
+
+recurringJobManager.AddOrUpdate<ChunkCleanupJob>(
+    "chunk-cleanup",
+    job => job.CleanupExpiredChunksAsync(null!, CancellationToken.None),
+    "0 */6 * * *");
 
 app.Run();

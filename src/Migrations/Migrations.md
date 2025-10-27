@@ -11,7 +11,12 @@ dotnet ef migrations add <MigrationName> --context <NameDbContext>
 
 3. Create migration Sql Script:
 
-### Using PowerShell
+### Using PowerShell (Recommended)
+```powershell
+.\Scripts\generate-migration.ps1
+```
+
+### Manual PowerShell
 ```powershell
 dotnet ef migrations script --output Scripts/<Name>/$(Get-Date -Format "yyyyMMddHHmmss")_migration.sql --context <NameDbContext> --idempotent
 ```

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -25,28 +24,25 @@ public class FilesController : ControllerBase
     private readonly IFileCheckingService _fileCheckingService;
     private readonly IAnalyticsService _analyticsService;
     private readonly ILogger _logger;
-    /// <summary>
-    /// 500 MB
-    /// </summary>
-    private const long MaxFileSize = 500L * 1024 * 1024;
+    private readonly IConfiguration _configuration;
 
     public FilesController(
         IServiceScopeFactory serviceScopeFactory,
         IFileCheckingService fileCheckingService,
         IAnalyticsService analyticsService,
-        ILogger logger)
+        ILogger logger,
+        IConfiguration configuration)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _fileCheckingService = fileCheckingService;
         _analyticsService = analyticsService;
         _logger = logger.ForContext<FilesController>();
+        _configuration = configuration;
     }
 
     [HttpPost]
     [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
-    [RequestSizeLimit(MaxFileSize)]
-    [RequestFormLimits(MultipartBodyLengthLimit = MaxFileSize)]
-    public async Task<IActionResult> UploadFile(IFormFile file, bool forceAnalyze)
+    public async Task<IActionResult> UploadFile(IFormFile file, bool forceAnalyze, CancellationToken cancellationToken = default)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
@@ -64,7 +60,7 @@ public class FilesController : ControllerBase
             bool canProcess;
             await using (var stream = file.OpenReadStream())
             {
-                canProcess = await _fileCheckingService.CanProcessFileAsync(stream);
+                canProcess = await _fileCheckingService.CanProcessFileAsync(stream, cancellationToken);
             }
 
             if (!canProcess)
@@ -73,18 +69,18 @@ public class FilesController : ControllerBase
                 return BadRequest("File is not a valid Unturned Plugin that can be processed.");
             }
 
-            var fileHash = ComputeFileHash(file);
+            var fileHash = HashHelper.ComputeHash(file);
 
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-            var existingFile = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == fileHash);
+            var existingFile = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == fileHash, cancellationToken);
             FileData fileData;
             if (existingFile == null)
             {
                 IModuleProcessingContext processingContext;
                 await using (var checkStream = file.OpenReadStream())
                 {
-                    processingContext = await _fileCheckingService.CheckFileAsync(checkStream);
+                    processingContext = await _fileCheckingService.CheckFileAsync(checkStream, cancellationToken);
                 }
 
                 fileData = new FileData
@@ -99,13 +95,13 @@ public class FilesController : ControllerBase
                     TimesScanned = 1
                 };
 
-                await filesDb.Set<FileData>().AddAsync(fileData);
-                await filesDb.SaveChangesAsync();
+                await filesDb.Set<FileData>().AddAsync(fileData, cancellationToken);
+                await filesDb.SaveChangesAsync(cancellationToken);
 
                 var scanTime = DateTime.UtcNow - scanStartTime;
                 var isThreat = processingContext.Score >= 50;
 
-                await _analyticsService.RecordScanAsync(file.FileName, processingContext.Score, isThreat, scanTime);
+                await _analyticsService.RecordScanAsync(file.FileName, processingContext.Score, isThreat, scanTime, cancellationToken);
 
                 _logger.Information("New file {FileName} processed successfully. Score: {Score}, Time: {ScanTime}ms",
                     file.FileName, processingContext.Score, scanTime.TotalMilliseconds);
@@ -126,7 +122,7 @@ public class FilesController : ControllerBase
             {
                 existingFile.TimesScanned++;
 
-                await filesDb.SaveChangesAsync();
+                await filesDb.SaveChangesAsync(cancellationToken);
 
                 _logger.Information("File {FileName} already exists. Returning existing record without re-analysis.",
                     file.FileName);
@@ -156,12 +152,12 @@ public class FilesController : ControllerBase
             existingFile.LastScanned = DateTime.UtcNow;
             existingFile.TimesScanned++;
 
-            await filesDb.SaveChangesAsync();
+            await filesDb.SaveChangesAsync(cancellationToken);
 
             var reScanTime = DateTime.UtcNow - scanStartTime;
             var reIsThreat = reProcessingContext.Score >= 50;
 
-            await _analyticsService.RecordScanAsync(file.FileName, reProcessingContext.Score, reIsThreat, reScanTime);
+            await _analyticsService.RecordScanAsync(file.FileName, reProcessingContext.Score, reIsThreat, reScanTime, cancellationToken);
 
             _logger.Information("File {FileName} re-analyzed successfully. Score: {Score}, Time: {ScanTime}ms",
                 file.FileName, reProcessingContext.Score, reScanTime.TotalMilliseconds);
@@ -181,19 +177,19 @@ public class FilesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error processing file {FileName}", file.FileName);
-            throw; // Let GlobalExceptionHandler handle it
+            throw;
         }
     }
 
     [HttpGet("{hash}")]
     [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
-    public async Task<IActionResult> GetFileResult(string hash)
+    public async Task<IActionResult> GetFileResult(string hash, CancellationToken cancellationToken = default)
     {
         try
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-            var fileData = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == hash);
+            var fileData = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == hash, cancellationToken);
             if (fileData == null)
                 return NotFound($"File with hash {hash} not found.");
             var response = new FileCheckResponse
@@ -201,7 +197,7 @@ public class FilesController : ControllerBase
                 FileName = fileData.FileName ?? "Unknown",
                 FileHash = fileData.Hash,
                 Score = fileData.Score,
-                Checked = true, // If it's in the database, it was checked
+                Checked = true,
                 Message = "File retrieved from database",
                 ProcessedAt = fileData.LastScanned,
                 FileSizeBytes = fileData.SizeBytes
@@ -217,43 +213,34 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("analytics")]
-    public async Task<IActionResult> GetAnalytics()
+    public async Task<IActionResult> GetAnalytics(CancellationToken cancellationToken = default)
     {
         try
         {
-            // No rate limiting for cached data
-            var analytics = await _analyticsService.GetAnalyticsAsync();
+            var analytics = await _analyticsService.GetAnalyticsAsync(cancellationToken);
             return Ok(analytics);
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "Error retrieving analytics");
-            throw; // Let the GlobalExceptionHandler capture with Sentry
+            throw;
         }
     }
 
     [HttpGet("analytics/range")]
     [EnableRateLimiting(KnownRateLimitPolicies.AnalyticsWithDateRange)]
-    public async Task<IActionResult> GetAnalyticsWithDateRange([FromQuery] DateTime from, [FromQuery] DateTime to)
+    public async Task<IActionResult> GetAnalyticsWithDateRange([FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken cancellationToken = default)
     {
         try
         {
-            // Rate limiting applied for date range queries
-            var analytics = await _analyticsService.GetAnalyticsAsync(from, to);
+            var analytics = await _analyticsService.GetAnalyticsAsync(from, to, cancellationToken);
             return Ok(analytics);
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "Error retrieving analytics with date range");
-            throw; // Let the GlobalExceptionHandler capture with Sentry
+            throw;
         }
     }
 
-    private static string ComputeFileHash(IFormFile file)
-    {
-        using var sha256 = SHA256.Create();
-        using var stream = file.OpenReadStream();
-        var hashBytes = sha256.ComputeHash(stream);
-        return Convert.ToBase64String(hashBytes);
-    }
 }

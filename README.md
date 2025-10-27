@@ -13,10 +13,10 @@ This API processes Unturned plugin files (.dll) and scans them for:
 ## Tech Stack
 
 - **Framework**: ASP.NET Core 9.0 with [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
-- **Database**: PostgreSQL with [dbup](https://dbup.readthedocs.io/) migrations
+- **Database**: PostgreSQL, [dbup](https://dbup.readthedocs.io/) & EF Core migrations
 - **Background Jobs**: [Hangfire](https://www.hangfire.io/)
 - **Logging**: [Serilog](https://serilog.net/)
-- **Error Tracking**: [Sentry](https://sentry.io/)
+- **Error Tracking**: [Sentry](https://sentry.io/) & [Bugsink](https://www.bugsink.com/)
 - **API Documentation**: Swagger/OpenAPI
 - **Deployment**: GitHub Actions builds with Aspire, pushes to GHCR, and deploys via SSH, we do not make it via GH Release for simple!
 
@@ -25,8 +25,7 @@ This API processes Unturned plugin files (.dll) and scans them for:
 ### Prerequisites
 
 - .NET 9.0 SDK
-- PostgreSQL
-- Docker (optional)
+- Docker Desktop (required for Aspire to run services)
 
 ### Local Development
 
@@ -36,33 +35,28 @@ git clone https://github.com/Safeturned/Api.git
 cd Api
 ```
 
-2. Run with Aspire (includes PostgreSQL and pgAdmin):
+2. Install Aspire CLI:
 ```bash
-dotnet run --project Safeturned.AppHost
+dotnet tool install --global Aspire.Cli
 ```
 
-3. Services will be available at:
+3. Run with Aspire (includes PostgreSQL and pgAdmin):
+```bash
+aspire run
+```
+
+4. Services will be available at:
    - API: `http://localhost:5000`
    - pgAdmin: `http://localhost:5050`
    - Hangfire Dashboard: `http://localhost:5000/hangfire`
-
-### Docker
-
-```bash
-# Build and run with Aspire (generates docker-compose.yaml)
-dotnet run --project Safeturned.AppHost
-
-# Or use the generated docker-compose.yaml directly
-docker compose up -d
-```
 
 ### Production Deployment
 
 The API is automatically deployed when you create a version tag:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag 1.0.0
+git push origin 1.0.0
 ```
 
 This triggers:
@@ -83,18 +77,11 @@ This triggers:
 
 ```
 Api/
-├── src/                    # Main API project
-├── Safeturned.AppHost/     # Aspire host
+├── src/                         # Main API project
+├── Safeturned.AppHost/          # Aspire host
 ├── Safeturned.ServiceDefaults/  # Shared services
-└── FileChecker/           # Plugin analysis logic
+└── FileChecker/                 # Plugin analysis logic
 ```
-
-## Development
-
-The project uses:
-- **Aspire** for local development and deployment
-- **Submodules** for the FileChecker component
-- **GitHub Actions** for CI/CD
 
 ## License
 

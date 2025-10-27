@@ -14,7 +14,7 @@ public class FileCheckingService : IFileCheckingService
         _logger = logger.ForContext<FileCheckingService>();
     }
 
-    public async Task<IModuleProcessingContext> CheckFileAsync(Stream fileStream)
+    public async Task<IModuleProcessingContext> CheckFileAsync(Stream fileStream, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -24,28 +24,37 @@ public class FileCheckingService : IFileCheckingService
             _logger.Information("File check completed. Score: {Score}, Checked: {Checked}", context.Score, context.Checked);
             return context;
         }
+        catch (OperationCanceledException)
+        {
+            _logger.Information("File check was cancelled");
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.Error(ex, "Error during file check");
-            throw; // Let the GlobalExceptionHandler capture with Sentry
+            throw;
         }
     }
 
-    public async Task<bool> CanProcessFileAsync(Stream fileStream)
+    public async Task<bool> CanProcessFileAsync(Stream fileStream, CancellationToken cancellationToken = default)
     {
         try
         {
             fileStream.Position = 0;
             using var memoryStream = new MemoryStream();
-            await fileStream.CopyToAsync(memoryStream);
+            await fileStream.CopyToAsync(memoryStream, cancellationToken);
             memoryStream.Position = 0;
             var module = ModuleDefMD.Load(memoryStream);
             return module != null;
         }
+        catch (OperationCanceledException)
+        {
+            _logger.Debug("File processing was cancelled");
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.Debug(ex, "File is not a valid .NET assembly");
-            // Don't capture this in Sentry as it's expected behavior for invalid files
             return false;
         }
     }
