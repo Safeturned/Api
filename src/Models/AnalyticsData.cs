@@ -4,7 +4,6 @@ public class AnalyticsData
 {
     public long TotalFilesScanned { get; set; }
     public long TotalThreatsDetected { get; set; }
-    public double DetectionAccuracy { get; set; }
     public double AverageScanTimeMs { get; set; }
     public DateTime LastUpdated { get; set; }
     public long TotalSafeFiles { get; set; }
