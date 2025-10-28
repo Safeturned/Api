@@ -1,6 +1,8 @@
 # Safeturned API
 
-Backend API for the Safeturned security scanning service. Handles plugin analysis, threat detection, and provides REST endpoints for the web interface.
+Backend API for the Safeturned security scanning service that protects Unturned servers from malicious plugins. This API handles plugin analysis, threat detection, and provides REST endpoints for the web interface.
+
+**Try it now**: [https://safeturned.com](https://safeturned.com) - Upload and scan your Unturned plugins instantly!
 
 ## What it does
 
