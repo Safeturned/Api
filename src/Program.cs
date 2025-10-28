@@ -21,7 +21,7 @@ using Serilog.Debugging;
 
 SelfLog.Enable(Console.Error);
 
-Log.Logger = new LoggerConfiguration()
+var logger = Log.Logger = new LoggerConfiguration()
     .WriteTo.AddConsoleLogger()
     .CreateLogger();
 
@@ -122,17 +122,17 @@ services.AddScoped<IChunkStorageService, ChunkStorageService>();
 
 var chunkStoragePath = config.GetRequiredString("ChunkStorage:DirectoryPath");
 Directory.CreateDirectory(chunkStoragePath);
-try 
-{ 
+try
+{
     var testFile = Path.Combine(chunkStoragePath, $".writability_test_{Guid.NewGuid():N}");
     File.WriteAllText(testFile, "test");
     File.Delete(testFile);
-    logger.LogInformation("Chunk storage directory is writable: {Path}", chunkStoragePath);
+    logger.Information("Chunk storage directory is writable: {Path}", chunkStoragePath);
 }
-catch (Exception ex) 
-{ 
-    logger.LogError(ex, "Chunk storage directory is not writable: {Path}", chunkStoragePath);
-    throw new InvalidOperationException($"Chunk storage directory is not writable: {chunkStoragePath}.", ex); 
+catch (Exception ex)
+{
+    logger.Error(ex, "Chunk storage directory is not writable: {Path}", chunkStoragePath);
+    throw new InvalidOperationException($"Chunk storage directory is not writable: {chunkStoragePath}.", ex);
 }
 
 services.AddMemoryCache();
