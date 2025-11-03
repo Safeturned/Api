@@ -61,7 +61,7 @@ if (securitySettings?.AllowedOrigins != null && securitySettings.AllowedOrigins.
 
 var dbConnectionString = config.GetRequiredConnectionString("safeturned-db");
 
-var dbPrepare = new DatabasePreparator(loggerFactory);
+var dbPrepare = new DatabasePreparator(loggerFactory, builder.Environment);
 dbPrepare
     .Add("Hangfire", dbConnectionString, DbPrepareType.PostgreSql, true)
     .Add("Files", dbConnectionString, DbPrepareType.PostgreSql, true, DbReference.Filter)
@@ -218,6 +218,12 @@ services.AddSerilog(Log.Logger);
 
 var app = builder.Build();
 
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    ApplyMigration<FilesDbContext>(scope);
+}
+
 AppDomain.CurrentDomain.UnhandledException += ExceptionHandling.OnUnhandledException;
 
 app.MapDefaultEndpoints();
@@ -271,3 +277,9 @@ recurringJobManager.AddOrUpdate<ChunkCleanupJob>(
     "0 */6 * * *");
 
 app.Run();
+
+static void ApplyMigration<TDbContext>(IServiceScope scope) where TDbContext : DbContext
+{
+    using var context = scope.ServiceProvider.GetRequiredService<TDbContext>();
+    context.Database.Migrate();
+}

@@ -13,12 +13,14 @@ public enum DbPrepareType
 public class DatabasePreparator
 {
     private readonly IUpgradeLog _upgradeLogger;
+    private readonly IWebHostEnvironment _environment;
     private readonly ILogger<DatabasePreparator> _logger;
     private readonly Dictionary<string, PrepareDatabase> _databases = [];
 
-    public DatabasePreparator(ILoggerFactory loggerFactory)
+    public DatabasePreparator(ILoggerFactory loggerFactory, IWebHostEnvironment environment)
     {
         _upgradeLogger = new MicrosoftUpgradeLog(loggerFactory);
+        _environment = environment;
         _logger = loggerFactory.CreateLogger<DatabasePreparator>();
     }
 
@@ -33,7 +35,10 @@ public class DatabasePreparator
     {
         OutputInfo();
         EnsureExists();
-        Migrate();
+        if (_environment.IsProduction())
+        {
+            Migrate();
+        }
         _databases.Clear();
     }
 
