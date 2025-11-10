@@ -17,8 +17,8 @@
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.21" />
     <PackageReference Include="Hangfire.Dashboard.Basic.Authentication" Version="8.0.0" />
     <PackageReference Include="Hangfire.Console" Version="1.4.3" />
-    <PackageReference Include="dbup-core" Version="6.0.4" />
-    <PackageReference Include="dbup-mysql" Version="6.0.4" />
+    <PackageReference Include="dbup-core" Version="6.0.15" />
+    <PackageReference Include="dbup-mysql" Version="6.1.0" />
     <PackageReference Include="dbup-postgresql" Version="6.0.3" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
