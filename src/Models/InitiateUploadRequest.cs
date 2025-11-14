@@ -1,45 +1,40 @@
 namespace Safeturned.Api.Models;
 
-public class InitiateUploadRequest
-{
-    public string FileName { get; set; } = string.Empty;
-    public long FileSizeBytes { get; set; }
-    public string FileHash { get; set; } = string.Empty;
-    public int TotalChunks { get; set; }
-}
+public record InitiateUploadRequest(
+    string FileName,
+    long FileSizeBytes,
+    string FileHash,
+    int TotalChunks
+);
 
-public class InitiateUploadResponse
-{
-    public string SessionId { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
-}
+public record InitiateUploadResponse(
+    string SessionId,
+    string Message
+);
 
-public class UploadChunkRequest
-{
-    public string SessionId { get; set; } = string.Empty;
-    public int ChunkIndex { get; set; }
-    public IFormFile Chunk { get; set; } = null!;
-    public string ChunkHash { get; set; } = string.Empty;
-}
+public record UploadChunkRequest(
+    string SessionId,
+    int ChunkIndex,
+    IFormFile Chunk,
+    string ChunkHash
+);
 
-public class UploadChunkResponse
-{
-    public bool Success { get; set; }
-    public string Message { get; set; } = string.Empty;
-}
+public record UploadChunkResponse(
+    bool Success,
+    string Message
+);
 
-public class CompleteUploadRequest
-{
-    public string SessionId { get; set; } = string.Empty;
-}
+public record CompleteUploadRequest(
+    string SessionId,
+    string? BadgeToken
+);
 
-public class UploadStatusResponse
-{
-    public string SessionId { get; set; } = string.Empty;
-    public string FileName { get; set; } = string.Empty;
-    public int TotalChunks { get; set; }
-    public int UploadedChunks { get; set; }
-    public double ProgressPercentage { get; set; }
-    public bool IsCompleted { get; set; }
-    public DateTime ExpiresAt { get; set; }
-}
+public record UploadStatusResponse(
+    string SessionId,
+    string FileName,
+    int TotalChunks,
+    int UploadedChunks,
+    double ProgressPercentage,
+    bool IsCompleted,
+    DateTime ExpiresAt
+);

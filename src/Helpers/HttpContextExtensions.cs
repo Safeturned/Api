@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Claims;
 using Microsoft.Net.Http.Headers;
+using Safeturned.Api.Database.Models;
 
 namespace Safeturned.Api.Helpers;
 
@@ -53,5 +55,20 @@ public static class HttpContextExtensions
     public static string GetIPAddress(this IHttpContextAccessor accessor)
     {
         return GetIPAddress(accessor.HttpContext!);
+    }
+    public static (Guid? userId, Guid? apiKeyId) GetUserContext(this HttpContext httpContext)
+    {
+        var userId = httpContext.Items["UserId"] as Guid?;
+        var apiKeyId = httpContext.Items["ApiKeyId"] as Guid?;
+        if (userId == null)
+        {
+            var user = httpContext.User;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.FindFirst("sub")?.Value;
+            if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var parsedUserId))
+            {
+                userId = parsedUserId;
+            }
+        }
+        return (userId, apiKeyId);
     }
 }

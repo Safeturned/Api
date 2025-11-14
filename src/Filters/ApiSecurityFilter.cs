@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
+using Safeturned.Api.Constants;
+using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
-using ILogger = Serilog.ILogger;
+using Safeturned.Api.Services;
 
 namespace Safeturned.Api.Filters;
 
@@ -13,24 +16,77 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
     {
         var securitySettings = context.HttpContext.RequestServices.GetRequiredService<IOptions<SecuritySettings>>().Value;
         var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger>().ForContext<ApiSecurityFilter>();
+        var apiKeyService = context.HttpContext.RequestServices.GetService<IApiKeyService>();
+
+        var startTimestamp = Stopwatch.GetTimestamp();
+
         if (securitySettings.RequireApiKey)
         {
-            if (!ValidateApiKey(context, securitySettings.ApiKey))
+            var apiKeyHeader = context.HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(apiKeyHeader) &&
+                apiKeyService != null &&
+                (apiKeyHeader.StartsWith(ApiKeyConstants.LivePrefix) || apiKeyHeader.StartsWith(ApiKeyConstants.TestPrefix)))
             {
-                logger.Warning("Invalid or missing API key from {IPAddress}", context.HttpContext.Connection.RemoteIpAddress);
-                context.Result = new UnauthorizedObjectResult(new { error = "Invalid API key" });
+                var clientIp = context.HttpContext.GetIPAddress();
+                var apiKey = await apiKeyService.ValidateApiKeyAsync(apiKeyHeader, clientIp);
+
+                if (apiKey == null)
+                {
+                    logger.Warning("Invalid database API key from {IPAddress}", clientIp);
+                    context.Result = new UnauthorizedObjectResult(new { error = "Invalid or expired API key" });
+                    return;
+                }
+
+                context.HttpContext.Items["UserId"] = apiKey.UserId;
+                context.HttpContext.Items["ApiKeyId"] = apiKey.Id;
+                context.HttpContext.Items["User"] = apiKey.User;
+                context.HttpContext.Items["ApiKey"] = apiKey;
+
+                var requiredScope = GetRequiredScope(context);
+                if (!string.IsNullOrEmpty(requiredScope) && !HasScope(apiKey.Scopes, requiredScope))
+                {
+                    logger.Warning("API key {ApiKeyId} lacks required scope: {RequiredScope}", apiKey.Id, requiredScope);
+                    context.Result = new ForbidResult();
+                    return;
+                }
+
+                var executedContext = await next();
+                var elapsedMs = (int)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+                await apiKeyService.LogApiKeyUsageAsync(
+                    apiKey.Id,
+                    context.HttpContext.Request.Path,
+                    context.HttpContext.Request.Method,
+                    executedContext.HttpContext.Response.StatusCode,
+                    elapsedMs,
+                    clientIp
+                );
+                await apiKeyService.UpdateLastUsedAsync(apiKey.Id);
+
                 return;
             }
+            else
+            {
+                // Legacy API key validation (from config)
+                if (!ValidateApiKey(context, securitySettings.ApiKey))
+                {
+                    logger.Warning("Invalid or missing legacy API key from {IPAddress}", context.HttpContext.GetIPAddress());
+                    context.Result = new UnauthorizedObjectResult(new { error = "Invalid API key" });
+                    return;
+                }
+            }
         }
+
         if (securitySettings.RequireOriginValidation)
         {
             if (!ValidateOrigin(context, securitySettings.AllowedOrigins))
             {
-                logger.Warning("Invalid origin from {IPAddress}: {Origin}", context.HttpContext.Connection.RemoteIpAddress, context.HttpContext.Request.Headers.Origin.ToString());
+                logger.Warning("Invalid origin from {IPAddress}: {Origin}", context.HttpContext.GetIPAddress(), context.HttpContext.Request.Headers.Origin.ToString());
                 context.Result = new ForbidResult();
                 return;
             }
         }
+
         await next();
     }
 
@@ -69,5 +125,29 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
             return allowedOrigins.Any(allowedOrigin => hostHeader.Equals(allowedOrigin.Replace("https://", "").Replace("http://", ""), StringComparison.OrdinalIgnoreCase));
         }
         return false;
+    }
+
+    private static string? GetRequiredScope(ActionExecutingContext context)
+    {
+        var path = context.HttpContext.Request.Path.Value?.ToLower() ?? "";
+        if (path.Contains("/files") && HttpMethods.IsPost(context.HttpContext.Request.Method))
+        {
+            return "analyze";
+        }
+        if (path.Contains("/runtime-scan"))
+        {
+            return "runtime-scan";
+        }
+        if (HttpMethods.IsPost(context.HttpContext.Request.Method))
+        {
+            return "read";
+        }
+        return null;
+    }
+
+    private static bool HasScope(string scopes, string requiredScope)
+    {
+        var scopeList = scopes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return scopeList.Contains(requiredScope, StringComparer.OrdinalIgnoreCase);
     }
 }

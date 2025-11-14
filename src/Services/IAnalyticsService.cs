@@ -7,7 +7,7 @@ public interface IAnalyticsService
     /// <summary>
     /// Records a file scan with its results
     /// </summary>
-    Task RecordScanAsync(string fileName, float score, bool isThreat, TimeSpan scanTime, CancellationToken cancellationToken = default);
+    Task RecordScanAsync(string fileName, string? fileHash, float score, bool isThreat, TimeSpan scanTime, Guid? userId = null, Guid? apiKeyId = null, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Gets the current analytics data

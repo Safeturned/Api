@@ -1,21 +1,29 @@
+using System.Text;
+using System.Threading.Channels;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Hangfire;
 using Hangfire.Console;
 using Hangfire.PostgreSql;
 using HangfireBasicAuthenticationFilter;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.IdentityModel.Tokens;
+using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Preparing;
 using Safeturned.Api.ExceptionHandlers;
 using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Jobs;
+using Safeturned.Api.Middleware;
 using Safeturned.Api.Models;
 using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Scripts.Files;
 using Safeturned.Api.Services;
+using Sentry.Hangfire;
 using Serilog;
 using Serilog.Debugging;
 
@@ -60,7 +68,6 @@ if (securitySettings?.AllowedOrigins != null && securitySettings.AllowedOrigins.
 }
 
 var dbConnectionString = config.GetRequiredConnectionString("safeturned-db");
-
 var dbPrepare = new DatabasePreparator(loggerFactory, builder.Environment);
 dbPrepare
     .Add("Hangfire", dbConnectionString, DbPrepareType.PostgreSql, true)
@@ -117,8 +124,23 @@ services.AddRateLimiter(options =>
 
 services.AddOpenApi();
 
+services.AddHttpClient();
+
 services.AddScoped<IFileCheckingService, FileCheckingService>();
 services.AddScoped<IChunkStorageService, ChunkStorageService>();
+
+services.AddScoped<ITokenService, TokenService>();
+services.AddScoped<IDiscordAuthService, DiscordAuthService>();
+services.AddScoped<ISteamAuthService, SteamAuthService>();
+services.AddScoped<IApiKeyService, ApiKeyService>();
+
+services.AddSingleton(_ => Channel.CreateUnbounded<ApiKeyUsageLogRequest>(new UnboundedChannelOptions
+{
+    SingleReader = true,
+    AllowSynchronousContinuations = false
+}));
+
+services.AddHostedService<ApiKeyUsageLoggerService>();
 
 var chunkStoragePath = config.GetRequiredString("ChunkStorage:DirectoryPath");
 Directory.CreateDirectory(chunkStoragePath);
@@ -135,7 +157,13 @@ catch (Exception ex)
     throw new InvalidOperationException($"Chunk storage directory is not writable: {chunkStoragePath}.", ex);
 }
 
-services.AddMemoryCache();
+var redisConnectionString = config.GetRequiredConnectionString("safeturned-redis");
+services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = redisConnectionString;
+    options.InstanceName = "Safeturned:";
+});
+
 services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 services.AddApiVersioning(options =>
@@ -154,6 +182,7 @@ services.AddApiVersioning(options =>
 });
 
 services.AddHangfire(x => x
+    .UseSentry()
     .UseConsole()
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
@@ -197,6 +226,85 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 services.AddHttpContextAccessor();
+
+var jwtSecret = config.GetRequiredString("Jwt:SecretKey");
+services.AddAuthentication("Bearer")
+    .AddCookie("Cookies", options =>
+    {
+        options.Cookie.Name = "safeturned_oauth";
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+        options.SlidingExpiration = false;
+        if (builder.Environment.IsDevelopment())
+        {
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.None;
+        }
+    })
+    .AddJwtBearer("Bearer", options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = config.GetRequiredString("Jwt:Issuer"),
+            ValidAudience = config.GetRequiredString("Jwt:Audience"),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ClockSkew = TimeSpan.Zero
+        };
+    })
+    .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
+        ApiKeyAuthenticationOptions.DefaultScheme,
+        options => { })
+    .AddDiscord(options =>
+    {
+        options.ClientId = config.GetRequiredString("Discord:ClientId");
+        options.ClientSecret = config.GetRequiredString("Discord:ClientSecret");
+        options.CallbackPath = "/signin-discord";
+        options.Scope.Add("identify");
+        options.Scope.Add("email");
+        options.SaveTokens = true;
+        options.SignInScheme = "Cookies";
+
+        options.ClaimActions.MapCustomJson("urn:discord:avatar:url", user =>
+        {
+            var userId = user.GetString("id");
+            var avatar = user.GetString("avatar");
+            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(avatar))
+                return null;
+
+            // Check if avatar is animated GIF (starts with "a_")
+            var extension = avatar.StartsWith("a_") ? "gif" : "png";
+            return $"https://cdn.discordapp.com/avatars/{userId}/{avatar}.{extension}";
+        });
+
+        options.Events.OnTicketReceived = context =>
+        {
+            context.ReturnUri = "/v1.0/auth/discord/callback";
+            return Task.CompletedTask;
+        };
+    })
+    .AddSteam(options =>
+    {
+        options.ApplicationKey = config.GetRequiredString("Steam:ApiKey");
+        options.CallbackPath = "/signin-steam";
+        options.SaveTokens = true;
+        options.SignInScheme = "Cookies";
+
+        options.Events.OnTicketReceived = context =>
+        {
+            context.ReturnUri = "/v1.0/auth/steam/callback";
+            return Task.CompletedTask;
+        };
+    });
+
+services.AddAuthorizationBuilder()
+    .AddPolicy(KnownAuthPolicies.AdminOnly, policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireClaim("is_admin", "true");
+    });
 services.AddControllers();
 
 services.Configure<FormOptions>(options =>
@@ -210,6 +318,22 @@ services.Configure<FormOptions>(options =>
 services.AddDbContext<FilesDbContext>(options =>
 {
     options.UseNpgsql(dbConnectionString);
+    options
+        .UseSeeding((context, _) =>
+        {
+            var seedService = new AdminSeedService(context, logger, config);
+            seedService.SeedAdminUser();
+        })
+        .UseAsyncSeeding((context, _, _) =>
+        {
+            var seedService = new AdminSeedService(context, logger, config);
+            seedService.SeedAdminUser();
+            return Task.CompletedTask;
+        });
+    if (builder.Environment.IsDevelopment())
+    {
+        options.ConfigureWarnings(x => x.Ignore(RelationalEventId.PendingModelChangesWarning));
+    }
 });
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -238,7 +362,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-//app.UseAuthentication();
+app.UseAuthentication();
 app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error, more: https://github.com/dotnet/aspnetcore/issues/51888
 
 if (securitySettings?.AllowedOrigins != null && securitySettings.AllowedOrigins.Length > 0)
@@ -247,7 +371,8 @@ if (securitySettings?.AllowedOrigins != null && securitySettings.AllowedOrigins.
 }
 
 app.UseRateLimiter();
-//app.UseAuthorization();
+app.UseApiKeyRateLimit();
+app.UseAuthorization();
 
 app.UseHangfireDashboard(config.GetRequiredString("Hangfire:DashboardPath"), new DashboardOptions
 {
@@ -281,5 +406,7 @@ app.Run();
 static void ApplyMigration<TDbContext>(IServiceScope scope) where TDbContext : DbContext
 {
     using var context = scope.ServiceProvider.GetRequiredService<TDbContext>();
-    context.Database.Migrate();
+    context.Database.EnsureDeleted();
+    context.Database.EnsureCreated();
+    //context.Database.Migrate();
 }

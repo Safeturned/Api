@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database.Models;
 
@@ -12,10 +11,62 @@ public class FilesDbContext : DbContext
     {
     }
 
-    [SuppressMessage("ReSharper", "UnusedMember.Local", MessageId = "Used externally by Set<T>()")]
-    private DbSet<FileData> Files { get; set; }
-    [SuppressMessage("ReSharper", "UnusedMember.Local", MessageId = "Used externally by Set<T>()")]
+    // ReSharper disable UnusedMember.Local (Used externally by Set<T>())
+    public DbSet<FileData> Files { get; set; }
     private DbSet<ScanRecord> Scans { get; set; }
-    [SuppressMessage("ReSharper", "UnusedMember.Local", MessageId = "Used externally by Set<T>()")]
     private DbSet<ChunkUploadSession> ChunkUploadSessions { get; set; }
+    private DbSet<User> Users { get; set; }
+    private DbSet<ApiKey> ApiKeys { get; set; }
+    private DbSet<ApiKeyUsage> ApiKeyUsages { get; set; }
+    private DbSet<RefreshToken> RefreshTokens { get; set; }
+    private DbSet<Badge> Badges { get; set; }
+    // ReSharper restore UnusedMember.Local
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<ApiKey>()
+            .HasIndex(k => k.KeyHash);
+
+        modelBuilder.Entity<ApiKey>()
+            .HasIndex(k => k.UserId);
+
+        modelBuilder.Entity<ApiKeyUsage>()
+            .HasIndex(u => u.ApiKeyId);
+
+        modelBuilder.Entity<ApiKeyUsage>()
+            .HasIndex(u => u.RequestedAt);
+
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Email)
+            .IsUnique();
+
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.DiscordId);
+
+        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(t => t.Token);
+
+        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(t => t.UserId);
+
+        modelBuilder.Entity<FileData>()
+            .HasIndex(f => f.UserId);
+
+        modelBuilder.Entity<FileData>()
+            .HasIndex(f => f.ApiKeyId);
+
+        modelBuilder.Entity<ScanRecord>()
+            .HasIndex(s => s.UserId);
+
+        modelBuilder.Entity<ScanRecord>()
+            .HasIndex(s => s.ApiKeyId);
+
+        modelBuilder.Entity<Badge>()
+            .HasIndex(b => b.UserId);
+
+        modelBuilder.Entity<Badge>()
+            .HasIndex(b => b.LinkedFileHash);
+    }
 }

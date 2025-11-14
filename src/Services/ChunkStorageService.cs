@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
-using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Services;
 

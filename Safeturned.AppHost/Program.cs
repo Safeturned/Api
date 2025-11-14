@@ -7,8 +7,13 @@ var database = builder.AddPostgres("database")
     .WithDataVolume()
     .AddDatabase("safeturned-db");
 
+var redis = builder.AddRedis("safeturned-redis")
+    .WithDataVolume();
+
 builder.AddProject<Projects.Safeturned_Api>("safeturned-api")
     .WithReference(database)
-    .WaitFor(database);
+    .WithReference(redis)
+    .WaitFor(database)
+    .WaitFor(redis);
 
 builder.Build().Run();

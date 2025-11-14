@@ -1,9 +1,9 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Distributed;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Models;
-using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Services;
 
@@ -11,21 +11,21 @@ public class AnalyticsService : IAnalyticsService
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger _logger;
-    private readonly IMemoryCache _cache;
+    private readonly IDistributedCache _cache;
     private const string AnalyticsCacheKey = "analytics_data";
     private const int CacheExpirationMinutes = 5;
 
     public AnalyticsService(
         IServiceScopeFactory serviceScopeFactory,
         ILogger logger,
-        IMemoryCache cache)
+        IDistributedCache cache)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _logger = logger.ForContext<AnalyticsService>();
         _cache = cache;
     }
 
-    public async Task RecordScanAsync(string fileName, float score, bool isThreat, TimeSpan scanTime, CancellationToken cancellationToken = default)
+    public async Task RecordScanAsync(string fileName, string? fileHash, float score, bool isThreat, TimeSpan scanTime, Guid? userId = null, Guid? apiKeyId = null, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -35,19 +35,22 @@ public class AnalyticsService : IAnalyticsService
             var scanRecord = new ScanRecord
             {
                 FileName = fileName,
+                FileHash = fileHash,
                 Score = score,
                 IsThreat = isThreat,
                 ScanTimeMs = (int)scanTime.TotalMilliseconds,
-                ScanDate = DateTime.UtcNow
+                ScanDate = DateTime.UtcNow,
+                UserId = userId,
+                ApiKeyId = apiKeyId
             };
 
             await filesDb.Set<ScanRecord>().AddAsync(scanRecord, cancellationToken);
             await filesDb.SaveChangesAsync(cancellationToken);
 
-            _cache.Remove(AnalyticsCacheKey);
+            await _cache.RemoveAsync(AnalyticsCacheKey, cancellationToken);
 
-            _logger.Information("Recorded scan: {FileName}, Score: {Score}, Threat: {IsThreat}, Time: {ScanTime}ms",
-                fileName, score, isThreat, scanTime.TotalMilliseconds);
+            _logger.Information("Recorded scan: {FileName}, Score: {Score}, Threat: {IsThreat}, Time: {ScanTime}ms, UserId: {UserId}",
+                fileName, score, isThreat, scanTime.TotalMilliseconds, userId);
         }
         catch (Exception ex)
         {
@@ -58,14 +61,27 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task<AnalyticsData> GetAnalyticsAsync(CancellationToken cancellationToken = default)
     {
-        if (_cache.TryGetValue(AnalyticsCacheKey, out AnalyticsData? cachedData))
+        var cachedDataBytes = await _cache.GetAsync(AnalyticsCacheKey, cancellationToken);
+        if (cachedDataBytes != null)
         {
-            return cachedData!;
+            var cachedData = JsonSerializer.Deserialize<AnalyticsData>(cachedDataBytes);
+            if (cachedData != null)
+            {
+                return cachedData;
+            }
         }
 
         var data = await CalculateAnalyticsAsync(cancellationToken: cancellationToken);
 
-        _cache.Set(AnalyticsCacheKey, data, TimeSpan.FromMinutes(CacheExpirationMinutes));
+        var dataBytes = JsonSerializer.SerializeToUtf8Bytes(data);
+        await _cache.SetAsync(
+            AnalyticsCacheKey,
+            dataBytes,
+            new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CacheExpirationMinutes)
+            },
+            cancellationToken);
 
         return data;
     }
@@ -77,7 +93,7 @@ public class AnalyticsService : IAnalyticsService
 
     public async Task UpdateAnalyticsCacheAsync(CancellationToken cancellationToken = default)
     {
-        _cache.Remove(AnalyticsCacheKey);
+        await _cache.RemoveAsync(AnalyticsCacheKey, cancellationToken);
         await GetAnalyticsAsync(cancellationToken);
     }
 
@@ -107,11 +123,11 @@ public class AnalyticsService : IAnalyticsService
             if (analytics.TotalFilesScanned > 0)
             {
                 analytics.ThreatDetectionRate = (double)analytics.TotalThreatsDetected / analytics.TotalFilesScanned * 100;
-                
+
                 analytics.AverageScanTimeMs = await query.AverageAsync(r => r.ScanTimeMs, cancellationToken);
                 analytics.TotalScanTimeMs = await query.SumAsync(r => r.ScanTimeMs, cancellationToken);
                 analytics.AverageScore = await query.AverageAsync(r => r.Score, cancellationToken);
-                
+
                 analytics.FirstScanDate = await query.MinAsync(r => r.ScanDate, cancellationToken);
                 analytics.LastScanDate = await query.MaxAsync(r => r.ScanDate, cancellationToken);
             }
@@ -131,17 +147,5 @@ public class AnalyticsService : IAnalyticsService
 
             return new AnalyticsData { LastUpdated = DateTime.UtcNow };
         }
-    }
-
-    private static string GetThreatType(float score)
-    {
-        return score switch
-        {
-            >= 80 => "High Risk",
-            >= 60 => "Medium Risk",
-            >= 40 => "Low Risk",
-            >= 20 => "Suspicious",
-            _ => "Safe"
-        };
     }
 }

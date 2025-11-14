@@ -1,7 +1,6 @@
 using dnlib.DotNet;
 using Safeturned.FileChecker;
 using Safeturned.FileChecker.Modules;
-using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Services;
 

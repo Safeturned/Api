@@ -1,13 +1,17 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Safeturned.Api.Constants;
+using Safeturned.Api.Database;
+using Safeturned.Api.Database.Models;
 using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
 using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Services;
+using Safeturned.FileChecker;
 using Safeturned.FileChecker.Modules;
-using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Controllers;
 
@@ -17,6 +21,7 @@ namespace Safeturned.Api.Controllers;
 [ApiSecurityFilter]
 public class ChunkedFilesController : ControllerBase
 {
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IChunkStorageService _chunkStorageService;
     private readonly IFileCheckingService _fileCheckingService;
     private readonly IAnalyticsService _analyticsService;
@@ -24,12 +29,14 @@ public class ChunkedFilesController : ControllerBase
     private readonly IConfiguration _configuration;
 
     public ChunkedFilesController(
+        IServiceScopeFactory serviceScopeFactory,
         IChunkStorageService chunkStorageService,
         IFileCheckingService fileCheckingService,
         IAnalyticsService analyticsService,
         ILogger logger,
         IConfiguration configuration)
     {
+        _serviceScopeFactory = serviceScopeFactory;
         _chunkStorageService = chunkStorageService;
         _fileCheckingService = fileCheckingService;
         _analyticsService = analyticsService;
@@ -62,8 +69,8 @@ public class ChunkedFilesController : ControllerBase
         if (string.IsNullOrEmpty(request.FileHash))
             return BadRequest("FileHash is required.");
 
-        if (!string.Equals(Path.GetExtension(request.FileName), ".dll", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("Only .DLL files are allowed.");
+        if (!string.Equals(Path.GetExtension(request.FileName), FileConstants.AllowedExtension, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(FileConstants.ErrorMessageInvalidExtension);
 
         try
         {
@@ -78,11 +85,7 @@ public class ChunkedFilesController : ControllerBase
 
             _logger.Information("Initiated upload session {SessionId} for file {FileName}", sessionId, request.FileName);
 
-            return Ok(new InitiateUploadResponse
-            {
-                SessionId = sessionId,
-                Message = "Upload session initiated successfully"
-            });
+            return Ok(new InitiateUploadResponse(sessionId, "Upload session initiated successfully"));
         }
         catch (Exception ex)
         {
@@ -132,11 +135,7 @@ public class ChunkedFilesController : ControllerBase
             if (await _chunkStorageService.IsChunkUploadedAsync(request.SessionId, request.ChunkIndex, cancellationToken))
             {
                 _logger.Debug("Chunk {ChunkIndex} already uploaded for session {SessionId}", request.ChunkIndex, request.SessionId);
-                return Ok(new UploadChunkResponse
-                {
-                    Success = true,
-                    Message = "Chunk already uploaded"
-                });
+                return Ok(new UploadChunkResponse(true, "Chunk already uploaded"));
             }
 
             var success = await _chunkStorageService.StoreChunkAsync(
@@ -154,11 +153,7 @@ public class ChunkedFilesController : ControllerBase
 
             _logger.Debug("Stored chunk {ChunkIndex} for session {SessionId}", request.ChunkIndex, request.SessionId);
 
-            return Ok(new UploadChunkResponse
-            {
-                Success = true,
-                Message = "Chunk uploaded successfully"
-            });
+            return Ok(new UploadChunkResponse(true, "Chunk uploaded successfully"));
         }
         catch (Exception ex)
         {
@@ -216,27 +211,142 @@ public class ChunkedFilesController : ControllerBase
                 processingContext = await _fileCheckingService.CheckFileAsync(stream, cancellationToken);
             }
 
+            AssemblyMetadata assemblyMetadata;
+            await using (var stream = new FileStream(finalFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                assemblyMetadata = AssemblyMetadataHelper.ExtractMetadata(stream);
+            }
+
+            var (userId, apiKeyId) = HttpContext.GetUserContext();
+
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+            Guid? validUserId = null;
+            if (userId.HasValue)
+            {
+                var userExists = await filesDb.Set<User>().AnyAsync(u => u.Id == userId.Value, cancellationToken);
+                if (userExists)
+                {
+                    validUserId = userId;
+                }
+                else
+                {
+                    _logger.Warning("User {UserId} from token does not exist in database, skipping user association", userId.Value);
+                }
+            }
+
+            var existingFile = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == session.FileHash, cancellationToken);
+
+            if (existingFile == null)
+            {
+                var fileData = new FileData
+                {
+                    Hash = session.FileHash,
+                    Score = (int)processingContext.Score,
+                    FileName = session.FileName,
+                    SizeBytes = session.FileSizeBytes,
+                    DetectedType = "Assembly",
+                    AddDateTime = DateTime.UtcNow,
+                    LastScanned = DateTime.UtcNow,
+                    TimesScanned = 1,
+                    UserId = validUserId,
+                    ApiKeyId = apiKeyId,
+                    AnalyzerVersion = Checker.Version,
+                    AssemblyCompany = assemblyMetadata.Company,
+                    AssemblyProduct = assemblyMetadata.Product,
+                    AssemblyTitle = assemblyMetadata.Title,
+                    AssemblyGuid = assemblyMetadata.Guid,
+                    AssemblyCopyright = assemblyMetadata.Copyright
+                };
+
+                await filesDb.Set<FileData>().AddAsync(fileData, cancellationToken);
+                await filesDb.SaveChangesAsync(cancellationToken);
+
+                if (!string.IsNullOrEmpty(request.BadgeToken) && validUserId.HasValue)
+                {
+                    var badges = await filesDb.Set<Badge>()
+                        .Where(b => b.UserId == validUserId.Value &&
+                                   b.RequireTokenForUpdate == true &&
+                                   b.UpdateToken != null)
+                        .ToListAsync(cancellationToken);
+
+                    foreach (var badge in badges)
+                    {
+                        if (BadgeTokenHelper.VerifyToken(request.BadgeToken, badge.UpdateToken!))
+                        {
+                            _logger.Information("Badge {BadgeId} auto-updating via token to hash {Hash}",
+                                badge.Id, fileData.Hash);
+                            badge.LinkedFileHash = fileData.Hash;
+                            badge.UpdatedAt = DateTime.UtcNow;
+                            badge.VersionUpdateCount++;
+                        }
+                    }
+
+                    if (badges.Any())
+                    {
+                        await filesDb.SaveChangesAsync(cancellationToken);
+                    }
+                }
+            }
+            else
+            {
+                existingFile.Score = (int)processingContext.Score;
+                existingFile.FileName = session.FileName;
+                existingFile.SizeBytes = session.FileSizeBytes;
+                existingFile.LastScanned = DateTime.UtcNow;
+                existingFile.TimesScanned++;
+                existingFile.AnalyzerVersion = Checker.Version;
+                existingFile.AssemblyCompany = assemblyMetadata.Company;
+                existingFile.AssemblyProduct = assemblyMetadata.Product;
+                existingFile.AssemblyTitle = assemblyMetadata.Title;
+                existingFile.AssemblyGuid = assemblyMetadata.Guid;
+                existingFile.AssemblyCopyright = assemblyMetadata.Copyright;
+                if (validUserId.HasValue && !existingFile.UserId.HasValue)
+                {
+                    existingFile.UserId = validUserId;
+                    existingFile.ApiKeyId = apiKeyId;
+                }
+
+                await filesDb.SaveChangesAsync(cancellationToken);
+
+                if (!string.IsNullOrEmpty(request.BadgeToken) && validUserId.HasValue)
+                {
+                    var badges = await filesDb.Set<Badge>()
+                        .Where(b => b.UserId == validUserId.Value &&
+                                   b.RequireTokenForUpdate == true &&
+                                   b.UpdateToken != null)
+                        .ToListAsync(cancellationToken);
+
+                    foreach (var badge in badges)
+                    {
+                        if (BadgeTokenHelper.VerifyToken(request.BadgeToken, badge.UpdateToken!))
+                        {
+                            _logger.Information("Badge {BadgeId} auto-updating via token to hash {Hash}",
+                                badge.Id, existingFile.Hash);
+                            badge.LinkedFileHash = existingFile.Hash;
+                            badge.UpdatedAt = DateTime.UtcNow;
+                            badge.VersionUpdateCount++;
+                        }
+                    }
+
+                    if (badges.Any())
+                    {
+                        await filesDb.SaveChangesAsync(cancellationToken);
+                    }
+                }
+            }
+
             var scanTime = DateTime.UtcNow - scanStartTime;
             var isThreat = processingContext.Score >= 50;
 
-            await _analyticsService.RecordScanAsync(session.FileName, processingContext.Score, isThreat, scanTime);
+            await _analyticsService.RecordScanAsync(session.FileName, session.FileHash, processingContext.Score, isThreat, scanTime, validUserId, apiKeyId, cancellationToken);
 
-            _logger.Information("File processing completed for session {SessionId}. Score: {Score}, Time: {ScanTime}ms",
-                request.SessionId, processingContext.Score, scanTime.TotalMilliseconds);
+            _logger.Information("File processing completed for session {SessionId}. Score: {Score}, Time: {ScanTime}ms", request.SessionId, processingContext.Score, scanTime.TotalMilliseconds);
 
-            await _chunkStorageService.CleanupSessionAsync(request.SessionId);
+            await _chunkStorageService.CleanupSessionAsync(request.SessionId, cancellationToken);
 
-            return Ok(new FileCheckResponse
-            {
-                FileName = session.FileName,
-                FileHash = session.FileHash,
-                Score = processingContext.Score,
-                Checked = true,
-                Message = "File processed successfully",
-                ProcessedAt = DateTime.UtcNow,
-                LastScanned = DateTime.UtcNow,
-                FileSizeBytes = session.FileSizeBytes
-            });
+            return Ok(new FileCheckResponse(session.FileName, session.FileHash, processingContext.Score, true, "File processed successfully", DateTime.UtcNow, DateTime.UtcNow, session.FileSizeBytes));
         }
         catch (Exception ex)
         {
@@ -263,16 +373,7 @@ public class ChunkedFilesController : ControllerBase
             var uploadedChunks = session.UploadedChunks.Count(chunk => chunk);
             var progress = (double)uploadedChunks / session.TotalChunks * 100;
 
-            return Ok(new UploadStatusResponse
-            {
-                SessionId = sessionId,
-                FileName = session.FileName,
-                TotalChunks = session.TotalChunks,
-                UploadedChunks = uploadedChunks,
-                ProgressPercentage = Math.Round(progress, 2),
-                IsCompleted = session.IsCompleted,
-                ExpiresAt = session.ExpiresAt
-            });
+            return Ok(new UploadStatusResponse(sessionId, session.FileName, session.TotalChunks, uploadedChunks, Math.Round(progress, 2), session.IsCompleted, session.ExpiresAt));
         }
         catch (Exception ex)
         {

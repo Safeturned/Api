@@ -2,7 +2,6 @@ using Hangfire.Console;
 using Hangfire.Server;
 using Safeturned.Api.Jobs.Helpers;
 using Safeturned.Api.Services;
-using ILogger = Serilog.ILogger;
 
 namespace Safeturned.Api.Jobs;
 
