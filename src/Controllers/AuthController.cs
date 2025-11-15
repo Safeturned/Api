@@ -67,39 +67,38 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = "Discord authentication failed" });
         }
 
-        _logger.Information("Discord authentication succeeded");
-
         var discordId = result.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var email = result.Principal?.FindFirst(ClaimTypes.Email)?.Value;
         var username = result.Principal?.FindFirst(ClaimTypes.Name)?.Value;
         var avatarClaim = result.Principal?.FindFirst("urn:discord:avatar:url")?.Value;
 
-        _logger.Information("Discord claims - ID: {DiscordId}, Email: {Email}, Username: {Username}",
-            discordId, email, username);
-
         var user = await _discordAuthService.HandleDiscordCallbackAsync(discordId!, email!, username!, avatarClaim);
-
-        _logger.Information("User created/updated: {UserId}", user.Id);
 
         var accessToken = _tokenService.GenerateAccessToken(user);
         var ipAddress = HttpContext.GetIPAddress();
         var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
 
-        _logger.Information("Tokens generated for user {UserId}", user.Id);
-
         result.Properties.Items.TryGetValue("returnUrl", out var returnUrl);
-        _logger.Information("Retrieved returnUrl from properties: {ReturnUrl}", returnUrl ?? "null");
-
         if (string.IsNullOrWhiteSpace(returnUrl))
-        {
             returnUrl = "/";
-            _logger.Warning("returnUrl was null or empty, using default '/'");
-        }
 
-        var finalUrl = $"{returnUrl}?access_token={accessToken}&refresh_token={refreshToken.Token}";
-        _logger.Information("Redirecting to: {FinalUrl}", finalUrl);
+        HttpContext.Response.Cookies.Append("access_token", accessToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddMinutes(60)
+        });
 
-        return Redirect(finalUrl);
+        HttpContext.Response.Cookies.Append("refresh_token", refreshToken.Token, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddDays(7)
+        });
+
+        return Redirect(returnUrl);
     }
 
     [HttpGet("steam")]
@@ -136,37 +135,36 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = "Steam authentication failed" });
         }
 
-        _logger.Information("Steam authentication succeeded");
-
         var steamId = result.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var username = result.Principal?.FindFirst(ClaimTypes.Name)?.Value;
 
-        _logger.Information("Steam claims - ID: {SteamId}, Username: {Username}",
-            steamId, username);
-
         var user = await _steamAuthService.HandleSteamCallbackAsync(steamId!, username!);
-
-        _logger.Information("User created/updated: {UserId}", user.Id);
 
         var accessToken = _tokenService.GenerateAccessToken(user);
         var ipAddress = HttpContext.GetIPAddress();
         var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
 
-        _logger.Information("Tokens generated for user {UserId}", user.Id);
-
         result.Properties.Items.TryGetValue("returnUrl", out var returnUrl);
-        _logger.Information("Retrieved returnUrl from properties: {ReturnUrl}", returnUrl ?? "null");
-
         if (string.IsNullOrWhiteSpace(returnUrl))
-        {
             returnUrl = "/";
-            _logger.Warning("returnUrl was null or empty, using default '/'");
-        }
 
-        var finalUrl = $"{returnUrl}?access_token={accessToken}&refresh_token={refreshToken.Token}";
-        _logger.Information("Redirecting to: {FinalUrl}", finalUrl);
+        HttpContext.Response.Cookies.Append("access_token", accessToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddMinutes(60)
+        });
 
-        return Redirect(finalUrl);
+        HttpContext.Response.Cookies.Append("refresh_token", refreshToken.Token, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = DateTimeOffset.UtcNow.AddDays(7)
+        });
+
+        return Redirect(returnUrl);
     }
 
     [HttpPost("refresh")]
