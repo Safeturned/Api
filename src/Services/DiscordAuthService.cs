@@ -24,36 +24,73 @@ public class DiscordAuthService : IDiscordAuthService
 
     public async Task<User> GetOrCreateUserAsync(string discordId, string email, string username, string? avatarUrl)
     {
-        var existingUser = await _context.Set<User>().FirstOrDefaultAsync(u => u.DiscordId == discordId);
-        if (existingUser != null)
-        {
-            existingUser.Email = email;
-            existingUser.DiscordUsername = username;
-            existingUser.DiscordAvatarUrl = avatarUrl;
-            await _context.SaveChangesAsync();
+        var existingIdentity = await _context.Set<UserIdentity>()
+            .Include(ui => ui.User)
+            .FirstOrDefaultAsync(ui => ui.Provider == AuthProvider.Discord && ui.ProviderUserId == discordId);
 
-            _logger.Information("Updated existing user {UserId} from Discord", existingUser.Id);
-            return existingUser;
+        if (existingIdentity != null)
+        {
+            existingIdentity.ProviderUsername = username;
+            existingIdentity.AvatarUrl = avatarUrl;
+            existingIdentity.LastAuthenticatedAt = DateTime.UtcNow;
+
+            if (!string.IsNullOrEmpty(email) && existingIdentity.User.Email != email)
+            {
+                existingIdentity.User.Email = email;
+            }
+
+            await _context.SaveChangesAsync();
+            _logger.Information("Updated existing Discord identity for user {UserId}", existingIdentity.UserId);
+            return existingIdentity.User;
         }
 
-        var newUser = new User
+        User? userByEmail = null;
+        if (!string.IsNullOrEmpty(email))
+        {
+            userByEmail = await _context.Set<User>()
+                .FirstOrDefaultAsync(u => u.Email == email);
+        }
+
+        User user;
+        if (userByEmail != null)
+        {
+            _logger.Information("Linking Discord identity to existing user {UserId}", userByEmail.Id);
+            user = userByEmail;
+        }
+        else
+        {
+            user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                Tier = TierType.Free,
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true,
+                IsAdmin = false
+            };
+
+            _context.Set<User>().Add(user);
+            await _context.SaveChangesAsync();
+            _logger.Information("Created new user {UserId} from Discord", user.Id);
+        }
+
+        var discordIdentity = new UserIdentity
         {
             Id = Guid.NewGuid(),
-            Email = email,
-            DiscordId = discordId,
-            DiscordUsername = username,
-            DiscordAvatarUrl = avatarUrl,
-            Tier = TierType.Free,
-            CreatedAt = DateTime.UtcNow,
-            IsActive = true,
-            IsAdmin = false
+            UserId = user.Id,
+            Provider = AuthProvider.Discord,
+            ProviderUserId = discordId,
+            ProviderUsername = username,
+            AvatarUrl = avatarUrl,
+            ConnectedAt = DateTime.UtcNow,
+            LastAuthenticatedAt = DateTime.UtcNow
         };
 
-        _context.Set<User>().Add(newUser);
+        _context.Set<UserIdentity>().Add(discordIdentity);
         await _context.SaveChangesAsync();
 
-        _logger.Information("Created new user {UserId} from Discord", newUser.Id);
-        return newUser;
+        _logger.Information("Created Discord identity for user {UserId}", user.Id);
+        return user;
     }
 
     public async Task UpdateLastLoginAsync(Guid userId)

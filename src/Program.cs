@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.RateLimiting;
@@ -269,19 +270,19 @@ services.AddAuthentication("Bearer")
 
         options.ClaimActions.MapCustomJson("urn:discord:avatar:url", user =>
         {
-            var userId = user.GetString("id");
             var avatar = user.GetString("avatar");
-            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(avatar))
-                return null;
-
-            // Check if avatar is animated GIF (starts with "a_")
-            var extension = avatar.StartsWith("a_") ? "gif" : "png";
-            return $"https://cdn.discordapp.com/avatars/{userId}/{avatar}.{extension}";
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "https://cdn.discordapp.com/avatars/{0}/{1}.{2}?size=1024",
+                user.GetString("id"),
+                avatar,
+                avatar.StartsWith("a_") ? "gif" : "png"
+            );
         });
 
         options.Events.OnTicketReceived = context =>
         {
-            context.ReturnUri = "/v1.0/auth/discord/callback";
+            context.ReturnUri = config.GetRequiredString("Discord:CallbackPath");
             return Task.CompletedTask;
         };
     })
@@ -294,7 +295,7 @@ services.AddAuthentication("Bearer")
 
         options.Events.OnTicketReceived = context =>
         {
-            context.ReturnUri = "/v1.0/auth/steam/callback";
+            context.ReturnUri = config.GetRequiredString("Steam:CallbackPath");
             return Task.CompletedTask;
         };
     });

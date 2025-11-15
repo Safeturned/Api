@@ -51,7 +51,7 @@ public class AdminController : ControllerBase
             var searchLower = search.ToLower();
             query = query.Where(x =>
                 x.Email.ToLower().Contains(searchLower) ||
-                (x.DiscordUsername != null && x.DiscordUsername.ToLower().Contains(searchLower)));
+                x.Identities.Any(i => i.ProviderUsername != null && i.ProviderUsername.ToLower().Contains(searchLower)));
         }
 
         if (tier.HasValue)
@@ -66,6 +66,7 @@ public class AdminController : ControllerBase
 
         var totalUsers = await query.CountAsync();
         var users = await query
+            .Include(u => u.Identities)
             .OrderByDescending(u => u.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -73,8 +74,8 @@ public class AdminController : ControllerBase
             {
                 x.Id,
                 x.Email,
-                x.DiscordUsername,
-                x.DiscordAvatarUrl,
+                Username = x.Username,
+                AvatarUrl = x.AvatarUrl,
                 x.Tier,
                 x.IsAdmin,
                 x.IsActive,
@@ -104,6 +105,7 @@ public class AdminController : ControllerBase
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
         var user = await db.Set<User>()
+            .Include(u => u.Identities)
             .Include(u => u.ApiKeys)
             .Include(u => u.ScannedFiles)
             .FirstOrDefaultAsync(u => u.Id == userId);
@@ -120,9 +122,17 @@ public class AdminController : ControllerBase
         {
             user.Id,
             user.Email,
-            user.DiscordId,
-            user.DiscordUsername,
-            user.DiscordAvatarUrl,
+            user.Username,
+            user.AvatarUrl,
+            linkedIdentities = user.Identities.Select(i => new
+            {
+                ProviderName = i.Provider.ToString(),
+                ProviderId = (int)i.Provider,
+                i.ProviderUserId,
+                i.ProviderUsername,
+                i.ConnectedAt,
+                i.LastAuthenticatedAt
+            }),
             user.Tier,
             user.IsAdmin,
             user.IsActive,
@@ -260,19 +270,22 @@ public class AdminController : ControllerBase
         var activeApiKeys = await db.Set<ApiKey>().CountAsync(k => k.IsActive);
 
         var recentUsers = await db.Set<User>()
+            .Include(u => u.Identities)
             .OrderByDescending(u => u.CreatedAt)
             .Take(5)
             .Select(u => new
             {
                 u.Id,
                 u.Email,
-                u.DiscordUsername,
+                Username = u.Username,
                 u.Tier,
                 u.CreatedAt
             })
             .ToListAsync();
 
         var recentScans = await db.Set<FileData>()
+            .Include(f => f.User)
+            .ThenInclude(u => u!.Identities)
             .OrderByDescending(f => f.AddDateTime)
             .Take(10)
             .Select(f => new
@@ -282,7 +295,7 @@ public class AdminController : ControllerBase
                 isMalicious = f.Score >= 50,
                 uploadedAt = f.AddDateTime,
                 userId = f.User != null ? f.User.Id : (Guid?)null,
-                username = f.User != null ? f.User.DiscordUsername : null
+                username = f.User != null ? f.User.Username : null
             })
             .ToListAsync();
 

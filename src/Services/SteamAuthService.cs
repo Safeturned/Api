@@ -98,24 +98,27 @@ public class SteamAuthService : ISteamAuthService
         // Extract numeric Steam ID if it's a URL
         var numericSteamId = steamId.Contains("/") ? steamId.Split('/').Last() : steamId;
 
-        var existingUser = await _context.Set<User>().FirstOrDefaultAsync(u => u.SteamId == numericSteamId);
-        if (existingUser != null)
-        {
-            existingUser.SteamUsername = username;
-            existingUser.SteamAvatarUrl = avatarUrl;
-            await _context.SaveChangesAsync();
+        // Check if this Steam identity already exists
+        var existingIdentity = await _context.Set<UserIdentity>()
+            .Include(ui => ui.User)
+            .FirstOrDefaultAsync(ui => ui.Provider == AuthProvider.Steam && ui.ProviderUserId == numericSteamId);
 
-            _logger.Information("Updated existing user {UserId} from Steam", existingUser.Id);
-            return existingUser;
+        if (existingIdentity != null)
+        {
+            // Update the Steam identity with latest info
+            existingIdentity.ProviderUsername = username;
+            existingIdentity.AvatarUrl = avatarUrl;
+            existingIdentity.LastAuthenticatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            _logger.Information("Updated existing Steam identity for user {UserId}", existingIdentity.UserId);
+            return existingIdentity.User;
         }
 
         var newUser = new User
         {
             Id = Guid.NewGuid(),
-            Email = $"{numericSteamId}@steam.local",
-            SteamId = numericSteamId,
-            SteamUsername = username,
-            SteamAvatarUrl = avatarUrl,
+            Email = null, // Steam doesn't provide email, so we leave it empty
             Tier = TierType.Free,
             CreatedAt = DateTime.UtcNow,
             IsActive = true,
@@ -124,8 +127,24 @@ public class SteamAuthService : ISteamAuthService
 
         _context.Set<User>().Add(newUser);
         await _context.SaveChangesAsync();
-
         _logger.Information("Created new user {UserId} from Steam", newUser.Id);
+
+        var steamIdentity = new UserIdentity
+        {
+            Id = Guid.NewGuid(),
+            UserId = newUser.Id,
+            Provider = AuthProvider.Steam,
+            ProviderUserId = numericSteamId,
+            ProviderUsername = username,
+            AvatarUrl = avatarUrl,
+            ConnectedAt = DateTime.UtcNow,
+            LastAuthenticatedAt = DateTime.UtcNow
+        };
+
+        _context.Set<UserIdentity>().Add(steamIdentity);
+        await _context.SaveChangesAsync();
+
+        _logger.Information("Created Steam identity for user {UserId}", newUser.Id);
         return newUser;
     }
 

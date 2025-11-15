@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Safeturned.Api.Controllers;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
@@ -148,6 +149,50 @@ public class TokenService : ITokenService
         }
     }
 
+    public async Task<List<LinkedIdentityResponse>> GetUserIdentitiesAsync(Guid userId)
+    {
+        var identities = await _context.Set<UserIdentity>()
+            .Where(ui => ui.UserId == userId)
+            .OrderByDescending(ui => ui.LastAuthenticatedAt ?? ui.ConnectedAt)
+            .ToListAsync();
+
+        return identities
+            .Select(i => new LinkedIdentityResponse(
+                i.Provider.ToString(),
+                (int)i.Provider,
+                i.ProviderUserId,
+                i.ProviderUsername,
+                i.ConnectedAt,
+                i.LastAuthenticatedAt
+            ))
+            .ToList();
+    }
+
+    public async Task<bool> UnlinkIdentityAsync(Guid userId, string providerName)
+    {
+        // Parse provider name to enum
+        if (!Enum.TryParse<AuthProvider>(providerName, true, out var provider))
+        {
+            _logger.Warning("Invalid provider name: {Provider}", providerName);
+            return false;
+        }
+
+        var identity = await _context.Set<UserIdentity>()
+            .FirstOrDefaultAsync(ui => ui.UserId == userId && ui.Provider == provider);
+
+        if (identity == null)
+        {
+            _logger.Warning("Attempted to unlink non-existent {Provider} identity for user {UserId}", providerName, userId);
+            return false;
+        }
+
+        _context.Set<UserIdentity>().Remove(identity);
+        await _context.SaveChangesAsync();
+
+        _logger.Information("Unlinked {Provider} identity for user {UserId}", providerName, userId);
+        return true;
+    }
+
     private static string GenerateSecureRandomToken()
     {
         var randomBytes = new byte[64];
@@ -156,3 +201,12 @@ public class TokenService : ITokenService
         return Convert.ToBase64String(randomBytes);
     }
 }
+
+public record LinkedIdentityResponse(
+    string ProviderName,
+    int ProviderId,
+    string ProviderUserId,
+    string? ProviderUsername,
+    DateTime ConnectedAt,
+    DateTime? LastAuthenticatedAt
+);

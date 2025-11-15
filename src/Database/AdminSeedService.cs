@@ -35,23 +35,26 @@ public class AdminSeedService
             var adminEmail = _config.GetRequiredString("AdminSeed:Email");
             var adminDiscordId = _config.GetRequiredString("AdminSeed:DiscordId");
 
-            var existingUser = _context.Set<User>().FirstOrDefault(u => u.DiscordId == adminDiscordId);
-            if (existingUser != null)
+            // Check if a user with this Discord identity already exists
+            var existingUserIdentity = _context.Set<UserIdentity>()
+                .Include(ui => ui.User)
+                .FirstOrDefault(ui => ui.Provider == AuthProvider.Discord && ui.ProviderUserId == adminDiscordId);
+
+            if (existingUserIdentity?.User != null)
             {
-                existingUser.IsAdmin = true;
-                existingUser.Tier = TierType.Premium;
+                existingUserIdentity.User.IsAdmin = true;
+                existingUserIdentity.User.Tier = TierType.Premium;
                 _context.SaveChanges();
 
-                _logger.Information("Promoted existing user {UserId} to admin", existingUser.Id);
+                _logger.Information("Promoted existing user {UserId} to admin", existingUserIdentity.User.Id);
                 return;
             }
 
+            // Create a new admin user (they must login via Discord to activate)
             var adminUser = new User
             {
                 Id = Guid.NewGuid(),
                 Email = adminEmail,
-                DiscordId = adminDiscordId,
-                DiscordUsername = "Admin (Pending Discord Login)",
                 Tier = TierType.Premium,
                 CreatedAt = DateTime.UtcNow,
                 IsActive = true,
@@ -61,7 +64,20 @@ public class AdminSeedService
             _context.Set<User>().Add(adminUser);
             _context.SaveChanges();
 
-            _logger.Information("Created admin user {UserId}. User must login via Discord to complete setup.", adminUser.Id);
+            // Create Discord identity for the admin user
+            var discordIdentity = new UserIdentity
+            {
+                Id = Guid.NewGuid(),
+                UserId = adminUser.Id,
+                Provider = AuthProvider.Discord,
+                ProviderUserId = adminDiscordId,
+                ConnectedAt = DateTime.UtcNow
+            };
+
+            _context.Set<UserIdentity>().Add(discordIdentity);
+            _context.SaveChanges();
+
+            _logger.Information("Created admin user {UserId} with Discord identity {DiscordId}. Admin account is ready.", adminUser.Id, adminDiscordId);
         }
         catch (Exception ex)
         {

@@ -7,27 +7,8 @@ public class User
     [Key]
     public Guid Id { get; set; }
 
-    [Required]
     [MaxLength(255)]
-    public string Email { get; set; } = string.Empty;
-
-    [MaxLength(100)]
-    public string? DiscordId { get; set; }
-
-    [MaxLength(100)]
-    public string? DiscordUsername { get; set; }
-
-    [MaxLength(255)]
-    public string? DiscordAvatarUrl { get; set; }
-
-    [MaxLength(100)]
-    public string? SteamId { get; set; }
-
-    [MaxLength(100)]
-    public string? SteamUsername { get; set; }
-
-    [MaxLength(255)]
-    public string? SteamAvatarUrl { get; set; }
+    public string? Email { get; set; }
 
     [Required]
     public TierType Tier { get; set; } = TierType.Free;
@@ -40,12 +21,30 @@ public class User
 
     public bool IsAdmin { get; set; } = false;
 
+    public ICollection<UserIdentity> Identities { get; set; } = new List<UserIdentity>();
     public ICollection<ApiKey> ApiKeys { get; set; } = new List<ApiKey>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<FileData> ScannedFiles { get; set; } = new List<FileData>();
 
-    public string? Username => DiscordUsername ?? SteamUsername;
-    public string? AvatarUrl => DiscordAvatarUrl ?? SteamAvatarUrl;
+    public string? Username
+    {
+        get
+        {
+            var discord = Identities?.FirstOrDefault(i => i.Provider == AuthProvider.Discord);
+            var steam = Identities?.FirstOrDefault(i => i.Provider == AuthProvider.Steam);
+            return discord?.ProviderUsername ?? steam?.ProviderUsername;
+        }
+    }
+
+    public string? AvatarUrl
+    {
+        get
+        {
+            var discord = Identities?.FirstOrDefault(i => i.Provider == AuthProvider.Discord);
+            var steam = Identities?.FirstOrDefault(i => i.Provider == AuthProvider.Steam);
+            return discord?.AvatarUrl ?? steam?.AvatarUrl;
+        }
+    }
 }
 
 public enum TierType

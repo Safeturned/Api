@@ -214,7 +214,7 @@ public class AuthController : ControllerBase
 
     [HttpGet("me")]
     [Authorize]
-    public IActionResult GetCurrentUser()
+    public async Task<IActionResult> GetCurrentUser()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
@@ -227,15 +227,76 @@ public class AuthController : ControllerBase
             tier = parsedTier;
         }
 
+        var identities = await GetUserIdentitiesAsync(userId);
+
         return Ok(new
         {
             id = userId,
             email,
             tier,
-            isAdmin = bool.Parse(isAdmin ?? "false")
+            isAdmin = bool.Parse(isAdmin ?? "false"),
+            linkedIdentities = identities
         });
+    }
+
+    [HttpGet("linked-identities")]
+    [Authorize]
+    public async Task<IActionResult> GetLinkedIdentities()
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        var identities = await GetUserIdentitiesAsync(userId);
+        return Ok(identities);
+    }
+
+    [HttpPost("unlink")]
+    [Authorize]
+    public async Task<IActionResult> UnlinkIdentity([FromBody] UnlinkIdentityRequest request)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
+        {
+            return Unauthorized();
+        }
+
+        if (string.IsNullOrEmpty(request.ProviderName))
+        {
+            return BadRequest(new { error = "ProviderName is required" });
+        }
+
+        // Prevent unlinking the last provider
+        var identities = await _tokenService.GetUserIdentitiesAsync(userGuid);
+        if (identities.Count <= 1)
+        {
+            return BadRequest(new { error = "Cannot unlink the only authentication method" });
+        }
+
+        // Unlink the identity
+        var result = await _tokenService.UnlinkIdentityAsync(userGuid, request.ProviderName);
+        if (!result)
+        {
+            return BadRequest(new { error = "Failed to unlink identity" });
+        }
+
+        _logger.Information("User {UserId} unlinked {Provider}", userGuid, request.ProviderName);
+        return Ok(new { message = $"{request.ProviderName} successfully unlinked" });
+    }
+
+    private async Task<List<LinkedIdentityResponse>> GetUserIdentitiesAsync(string? userId)
+    {
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
+        {
+            return [];
+        }
+
+        return await _tokenService.GetUserIdentitiesAsync(userGuid);
     }
 }
 
 public record RefreshTokenRequest(string RefreshToken);
 public record LogoutRequest(string? RefreshToken);
+public record UnlinkIdentityRequest(string ProviderName);

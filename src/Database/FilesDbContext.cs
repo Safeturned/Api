@@ -16,6 +16,7 @@ public class FilesDbContext : DbContext
     private DbSet<ScanRecord> Scans { get; set; }
     private DbSet<ChunkUploadSession> ChunkUploadSessions { get; set; }
     private DbSet<User> Users { get; set; }
+    private DbSet<UserIdentity> UserIdentities { get; set; }
     private DbSet<ApiKey> ApiKeys { get; set; }
     private DbSet<ApiKeyUsage> ApiKeyUsages { get; set; }
     private DbSet<RefreshToken> RefreshTokens { get; set; }
@@ -42,8 +43,16 @@ public class FilesDbContext : DbContext
             .HasIndex(u => u.Email)
             .IsUnique();
 
-        modelBuilder.Entity<User>()
-            .HasIndex(u => u.DiscordId);
+        // UserIdentity indexes for fast lookups by provider
+        modelBuilder.Entity<UserIdentity>()
+            .HasIndex(ui => new { ui.Provider, ui.ProviderUserId })
+            .IsUnique();
+
+        modelBuilder.Entity<UserIdentity>()
+            .HasIndex(ui => ui.UserId);
+
+        modelBuilder.Entity<UserIdentity>()
+            .HasIndex(ui => ui.Provider);
 
         modelBuilder.Entity<RefreshToken>()
             .HasIndex(t => t.Token);
