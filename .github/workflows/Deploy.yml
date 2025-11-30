@@ -121,7 +121,8 @@ jobs:
         VERSION="${{ steps.version.outputs.version }}"
         BRANCH="${{ steps.branch.outputs.branch }}"
         
-        docker tag "safeturned/api:v${VERSION}" "ghcr.io/safeturned/api:${BRANCH}"
+        docker pull "ghcr.io/safeturned/api:v${VERSION}"
+        docker tag "ghcr.io/safeturned/api:v${VERSION}" "ghcr.io/safeturned/api:${BRANCH}"
         docker push "ghcr.io/safeturned/api:${BRANCH}"
         
         echo "✅ Images pushed successfully"
