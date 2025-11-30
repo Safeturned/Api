@@ -75,7 +75,6 @@ public class TokenService : ITokenService
             CreatedByIp = ipAddress
         };
 
-
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
 
