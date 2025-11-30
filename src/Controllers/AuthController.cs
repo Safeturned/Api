@@ -74,56 +74,6 @@ public class AuthController : ControllerBase
         return Redirect(discordAuthUrl);
     }
 
-    [HttpGet("discord/callback")]
-    public async Task<IActionResult> DiscordCallback()
-    {
-        _logger.Information("Discord callback received");
-
-        var result = await HttpContext.AuthenticateAsync("Discord");
-        if (!result.Succeeded)
-        {
-            _logger.Error("Discord authentication failed");
-            return BadRequest(new { error = "Discord authentication failed" });
-        }
-
-        var discordId = result.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var email = result.Principal?.FindFirst(ClaimTypes.Email)?.Value;
-        var username = result.Principal?.FindFirst(ClaimTypes.Name)?.Value;
-        var avatarClaim = result.Principal?.FindFirst("urn:discord:avatar:url")?.Value;
-
-        var user = await _discordAuthService.HandleDiscordCallbackAsync(discordId!, email!, username!, avatarClaim);
-
-        var accessToken = _tokenService.GenerateAccessToken(user);
-        var ipAddress = HttpContext.GetIPAddress();
-        var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
-
-        result.Properties.Items.TryGetValue("returnUrl", out var returnUrl);
-        returnUrl = ValidateAndSanitizeReturnUrl(returnUrl);
-
-        // Set cookies - use Lax in dev (localhost same-site), None in production (cross-origin)
-        var isProduction = _environment.IsProduction();
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = isProduction,
-            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
-            Expires = DateTimeOffset.UtcNow.AddMinutes(60)
-        };
-
-        var refreshCookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = isProduction,
-            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
-            Expires = DateTimeOffset.UtcNow.AddDays(7)
-        };
-
-        HttpContext.Response.Cookies.Append(AuthConstants.AccessTokenCookie, accessToken, cookieOptions);
-        HttpContext.Response.Cookies.Append(AuthConstants.RefreshTokenCookie, refreshToken.Token, refreshCookieOptions);
-
-        return Redirect(returnUrl);
-    }
-
     [HttpGet("steam")]
     public IActionResult SteamLogin([FromQuery] string returnUrl = "/")
     {
@@ -146,52 +96,53 @@ public class AuthController : ControllerBase
         return Redirect(steamAuthUrl);
     }
 
-    [HttpGet("steam/callback")]
-    public async Task<IActionResult> SteamCallback()
+    [HttpPost("callback")]
+    public async Task<IActionResult> Callback([FromBody] OAuthCallbackRequest request)
     {
-        _logger.Information("Steam callback received");
-
-        var result = await HttpContext.AuthenticateAsync("Steam");
-        if (!result.Succeeded)
+        try
         {
-            _logger.Error("Steam authentication failed");
-            return BadRequest(new { error = "Steam authentication failed" });
+            if (string.IsNullOrEmpty(request.Provider))
+            {
+                return BadRequest(new { error = "Provider is required" });
+            }
+
+            if (request.Provider.Equals("discord", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(request.Code))
+                {
+                    return BadRequest(new { error = "Authorization code is required for Discord" });
+                }
+
+                var discordRequest = new OAuthExchangeRequest(request.Code, request.State);
+                return await ExchangeDiscordCode(discordRequest);
+            }
+            else if (request.Provider.Equals("steam", StringComparison.OrdinalIgnoreCase))
+            {
+                // Extract Steam OpenID parameters from the callback request
+                var steamRequest = new SteamExchangeRequest(
+                    request.OpenIdMode ?? "",
+                    request.GetProperty("openid.op_endpoint"),
+                    request.GetProperty("openid.claimed_id"),
+                    request.GetProperty("openid.identity"),
+                    request.GetProperty("openid.return_to"),
+                    request.GetProperty("openid.response_nonce"),
+                    request.GetProperty("openid.assoc_handle"),
+                    request.GetProperty("openid.signed"),
+                    request.GetProperty("openid.sig"),
+                    request.State
+                );
+                return await ExchangeSteamCode(steamRequest);
+            }
+            else
+            {
+                return BadRequest(new { error = $"Unknown provider: {request.Provider}" });
+            }
         }
-
-        var steamId = result.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        var username = result.Principal?.FindFirst(ClaimTypes.Name)?.Value;
-
-        var user = await _steamAuthService.HandleSteamCallbackAsync(steamId!, username!);
-
-        var accessToken = _tokenService.GenerateAccessToken(user);
-        var ipAddress = HttpContext.GetIPAddress();
-        var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
-
-        result.Properties.Items.TryGetValue("returnUrl", out var returnUrl);
-        returnUrl = ValidateAndSanitizeReturnUrl(returnUrl);
-
-        // Set cookies - use Lax in dev (localhost same-site), None in production (cross-origin)
-        var isProduction = _environment.IsProduction();
-        var cookieOptions = new CookieOptions
+        catch (Exception ex)
         {
-            HttpOnly = true,
-            Secure = isProduction,
-            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
-            Expires = DateTimeOffset.UtcNow.AddMinutes(60)
-        };
-
-        var refreshCookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = isProduction,
-            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
-            Expires = DateTimeOffset.UtcNow.AddDays(7)
-        };
-
-        HttpContext.Response.Cookies.Append(AuthConstants.AccessTokenCookie, accessToken, cookieOptions);
-        HttpContext.Response.Cookies.Append(AuthConstants.RefreshTokenCookie, refreshToken.Token, refreshCookieOptions);
-
-        return Redirect(returnUrl);
+            _logger.Error(ex, "Error processing OAuth callback");
+            return StatusCode(500, new { error = "An error occurred during authentication" });
+        }
     }
 
     [HttpPost("discord/exchange")]
@@ -288,21 +239,24 @@ public class AuthController : ControllerBase
             var ipAddress = HttpContext.GetIPAddress();
             var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
 
-            // Set cookies - SameSite=None requires Secure=true (Chrome enforces this even on localhost)
+            // Set cookies - adapt settings based on environment
+            var isProduction = _environment.IsProduction();
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                Secure = true, // Required when using SameSite=None
-                SameSite = SameSiteMode.None, // Required for cross-port requests (localhost:3000 → localhost:5000)
-                Expires = DateTimeOffset.UtcNow.AddMinutes(60)
+                Secure = isProduction, // HTTPS only in production; HTTP allowed in development
+                SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax, // Cross-site in prod, same-site in dev
+                Expires = DateTimeOffset.UtcNow.AddMinutes(60),
+                Path = "/"
             };
 
             var refreshCookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                Secure = true, // Required when using SameSite=None
-                SameSite = SameSiteMode.None, // Required for cross-port requests
-                Expires = DateTimeOffset.UtcNow.AddDays(7)
+                Secure = isProduction, // HTTPS only in production; HTTP allowed in development
+                SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax, // Cross-site in prod, same-site in dev
+                Expires = DateTimeOffset.UtcNow.AddDays(7),
+                Path = "/"
             };
 
             HttpContext.Response.Cookies.Append(AuthConstants.AccessTokenCookie, jwtAccessToken, cookieOptions);
@@ -342,11 +296,8 @@ public class AuthController : ControllerBase
 
         try
         {
-            // Steam OpenID validation
             var steamApiKey = _configuration.GetRequiredString("Steam:ApiKey");
             
-            // Use the actual return_to from the request, not construct our own
-            // Steam includes the exact return_to in the response, we must use it for validation
             var returnTo = request.OpenIdReturnTo;
             if (string.IsNullOrEmpty(returnTo))
             {
@@ -354,7 +305,6 @@ public class AuthController : ControllerBase
                 return BadRequest(new { error = "Invalid Steam authentication response - missing return_to" });
             }
 
-            // Validate the OpenID response
             var validationParams = new Dictionary<string, string>
             {
                 ["openid.ns"] = "http://specs.openid.net/auth/2.0",
@@ -362,7 +312,7 @@ public class AuthController : ControllerBase
                 ["openid.op_endpoint"] = request.OpenIdOpEndpoint ?? "https://steamcommunity.com/openid/login",
                 ["openid.claimed_id"] = request.OpenIdClaimedId ?? "",
                 ["openid.identity"] = request.OpenIdIdentity ?? "",
-                ["openid.return_to"] = returnTo, // Use the exact return_to from Steam's response
+                ["openid.return_to"] = returnTo,
                 ["openid.response_nonce"] = request.OpenIdResponseNonce ?? "",
                 ["openid.assoc_handle"] = request.OpenIdAssocHandle ?? "",
                 ["openid.signed"] = request.OpenIdSigned ?? "",
@@ -389,7 +339,6 @@ public class AuthController : ControllerBase
                 return BadRequest(new { error = "Invalid Steam authentication response" });
             }
 
-            // Extract Steam ID from claimed_id
             var claimedId = request.OpenIdClaimedId ?? "";
             if (!claimedId.Contains("/id/"))
             {
@@ -399,29 +348,29 @@ public class AuthController : ControllerBase
             var steamId = claimedId.Split(new[] { "/id/" }, StringSplitOptions.None).Last();
             var username = request.OpenIdIdentity?.Split('/').Last() ?? steamId;
 
-            // Create or update user
             var user = await _steamAuthService.HandleSteamCallbackAsync(steamId, username);
 
-            // Generate tokens
             var accessToken = _tokenService.GenerateAccessToken(user);
             var ipAddress = HttpContext.GetIPAddress();
             var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
 
-            // Set cookies - SameSite=None requires Secure=true (Chrome enforces this even on localhost)
+            var isProduction = _environment.IsProduction();
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                Secure = true, // Required when using SameSite=None
-                SameSite = SameSiteMode.None, // Required for cross-port requests (localhost:3000 → localhost:5000)
-                Expires = DateTimeOffset.UtcNow.AddMinutes(60)
+                Secure = isProduction, // HTTPS only in production; HTTP allowed in development
+                SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax, // Cross-site in prod, same-site in dev
+                Expires = DateTimeOffset.UtcNow.AddMinutes(60),
+                Path = "/"
             };
 
             var refreshCookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                Secure = true, // Required when using SameSite=None
-                SameSite = SameSiteMode.None, // Required for cross-port requests
-                Expires = DateTimeOffset.UtcNow.AddDays(7)
+                Secure = isProduction, // HTTPS only in production; HTTP allowed in development
+                SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax, // Cross-site in prod, same-site in dev
+                Expires = DateTimeOffset.UtcNow.AddDays(7),
+                Path = "/"
             };
 
             HttpContext.Response.Cookies.Append(AuthConstants.AccessTokenCookie, accessToken, cookieOptions);
@@ -570,14 +519,12 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = "ProviderName is required" });
         }
 
-        // Prevent unlinking the last provider
         var identities = await _tokenService.GetUserIdentitiesAsync(userGuid);
         if (identities.Count <= 1)
         {
             return BadRequest(new { error = "Cannot unlink the only authentication method" });
         }
 
-        // Unlink the identity
         var result = await _tokenService.UnlinkIdentityAsync(userGuid, request.ProviderName);
         if (!result)
         {
@@ -638,3 +585,62 @@ public record SteamExchangeRequest(
     string? OpenIdSigned = null,
     string? OpenIdSig = null,
     string? State = null);
+
+/// <summary>
+/// Unified OAuth callback request that handles both Discord and Steam authentication responses
+/// </summary>
+public class OAuthCallbackRequest : Dictionary<string, object>
+{
+    /// <summary>
+    /// The authentication provider: "discord" or "steam"
+    /// </summary>
+    public string? Provider
+    {
+        get => GetPropertyString("provider");
+        set => this["provider"] = value!;
+    }
+
+    /// <summary>
+    /// OAuth authorization code (Discord only)
+    /// </summary>
+    public string? Code
+    {
+        get => GetPropertyString("code");
+        set => this["code"] = value!;
+    }
+
+    /// <summary>
+    /// State parameter for CSRF protection and return URL
+    /// </summary>
+    public string? State
+    {
+        get => GetPropertyString("state");
+        set => this["state"] = value!;
+    }
+
+    /// <summary>
+    /// OpenID mode response parameter (Steam only)
+    /// </summary>
+    public string? OpenIdMode
+    {
+        get => GetPropertyString("openid.mode");
+        set => this["openid.mode"] = value!;
+    }
+
+    /// <summary>
+    /// Get a property value as string
+    /// </summary>
+    public string? GetProperty(string key)
+    {
+        return GetPropertyString(key);
+    }
+
+    private string? GetPropertyString(string key)
+    {
+        if (TryGetValue(key, out var value))
+        {
+            return value?.ToString();
+        }
+        return null;
+    }
+}

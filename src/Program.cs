@@ -74,8 +74,6 @@ builder.WebHost.UseSentry(x =>
     x.SetBeforeSend((sentryEvent, _) => sentryFilter.Filter(sentryEvent));
 });
 
-// Rate limiting is handled by custom ApiKeyRateLimitMiddleware
-
 services.AddOpenApi();
 
 services.AddHttpClient();
@@ -239,9 +237,21 @@ services.AddAuthentication(AuthConstants.BearerScheme)
             OnMessageReceived = context =>
             {
                 var hasAuthHeader = context.Request.Headers.ContainsKey("Authorization");
-                var hasCookie = context.Request.Cookies.ContainsKey(AuthConstants.AccessTokenCookie);
-                logger.Debug("JWT auth check - Path: {Path}, HasAuthHeader: {HasAuth}, HasCookie: {HasCookie}",
-                    context.Request.Path, hasAuthHeader, hasCookie);
+
+                if (!hasAuthHeader && context.Request.Cookies.TryGetValue(AuthConstants.AccessTokenCookie, out var token))
+                {
+                    context.Token = token;
+                    logger.Debug("JWT token extracted from cookie for path {Path}", context.Request.Path);
+                }
+                else if (hasAuthHeader)
+                {
+                    logger.Debug("JWT token from Authorization header for path {Path}", context.Request.Path);
+                }
+                else
+                {
+                    logger.Debug("No JWT token found (neither in header nor cookie) for path {Path}", context.Request.Path);
+                }
+
                 return Task.CompletedTask;
             }
         };

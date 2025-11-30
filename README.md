@@ -14,7 +14,7 @@ This API processes Unturned plugin files (.dll) and scans them for:
 
 ## Tech Stack
 
-- **Framework**: ASP.NET Core 9.0 with [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
+- **Framework**: ASP.NET Core 10.0 with [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
 - **Database**: PostgreSQL, [dbup](https://dbup.readthedocs.io/) & EF Core migrations
 - **Background Jobs**: [Hangfire](https://www.hangfire.io/)
 - **Logging**: [Serilog](https://serilog.net/)
@@ -26,7 +26,7 @@ This API processes Unturned plugin files (.dll) and scans them for:
 
 ### Prerequisites
 
-- .NET 9.0 SDK
+- .NET 10.0 SDK
 - Docker Desktop (required for Aspire to run services)
 
 ### Local Development
@@ -68,12 +68,9 @@ This triggers:
 
 ## API Endpoints
 
-- `POST /v1/files` - Upload and scan a .dll plugin file
-- `GET /v1/files/{id}` - Get scan results by file ID
-- `GET /v1/analytics` - Get analytics data
-- `GET /health` - Health check endpoint
+See our [docs](https://safeturned.com/docs) for API endpoints, and try our Live API Playground.
 
-**Note**: API requires authentication via API key and origin validation. In the short/long term future, we plan to make the API publicly available for everyone.
+Now this is also possible to create a custom API Key(s), to access our services outside of the website.
 
 ## Project Structure
 
