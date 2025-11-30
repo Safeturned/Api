@@ -57,7 +57,7 @@ public class AuthController : ControllerBase
         _logger.Information("Discord login initiated with returnUrl: {ReturnUrl}", returnUrl);
 
         var clientId = _configuration.GetRequiredString("Discord:ClientId");
-        var frontendUrl = _configuration.GetValue<string>("Frontend:Url") ?? "http://localhost:3000";
+        var frontendUrl = _configuration.GetRequiredString("Frontend:Url");
         var callbackUrl = $"{frontendUrl}/auth/callback";
 
         // Build state parameter with returnUrl (don't double-encode - state will be encoded once by the URL)
@@ -80,7 +80,7 @@ public class AuthController : ControllerBase
         returnUrl = ValidateAndSanitizeReturnUrl(returnUrl);
         _logger.Information("Steam login initiated with returnUrl: {ReturnUrl}", returnUrl);
 
-        var frontendUrl = _configuration.GetValue<string>("Frontend:Url") ?? "http://localhost:3000";
+        var frontendUrl = _configuration.GetRequiredString("Frontend:Url");
         var callbackUrl = $"{frontendUrl}/auth/callback";
 
         // Build state parameter with returnUrl (don't double-encode - state will be encoded once by the URL)
@@ -157,7 +157,7 @@ public class AuthController : ControllerBase
         {
             var clientId = _configuration.GetRequiredString("Discord:ClientId");
             var clientSecret = _configuration.GetRequiredString("Discord:ClientSecret");
-            var frontendUrl = _configuration.GetValue<string>("Frontend:Url") ?? "http://localhost:3000";
+            var frontendUrl = _configuration.GetRequiredString("Frontend:Url");
             var redirectUri = $"{frontendUrl}/auth/callback";
 
             // Exchange authorization code for access token
