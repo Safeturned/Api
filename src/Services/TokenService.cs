@@ -9,6 +9,7 @@ using Safeturned.Api.Controllers;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
+using Sentry;
 
 namespace Safeturned.Api.Services;
 
@@ -158,6 +159,7 @@ public class TokenService : ITokenService
         catch (Exception ex)
         {
             _logger.Warning(ex, "Failed to validate access token");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Failed to validate access token"));
             return null;
         }
     }

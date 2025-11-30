@@ -8,6 +8,7 @@ using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
+using Sentry;
 
 namespace Safeturned.Api.Controllers;
 
@@ -425,6 +426,7 @@ public class AdminController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error creating API key for user {UserId}", userId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error creating API key"));
             return StatusCode(500, new { error = "Failed to create API key", message = ex.Message });
         }
     }

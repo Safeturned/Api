@@ -2,6 +2,7 @@ using Hangfire.Console;
 using Hangfire.Server;
 using Safeturned.Api.Jobs.Helpers;
 using Safeturned.Api.Services;
+using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
@@ -14,21 +15,14 @@ public class AnalyticsCacheUpdateJob
         _analyticsService = analyticsService;
     }
 
+    [SentryMonitorSlug("analytics-cache")]
     [SkipWhenPreviousJobIsRunning]
     public async Task UpdateAnalyticsCache(PerformContext context, CancellationToken cancellationToken)
     {
-        try
-        {
-            context.WriteLine("Starting analytics cache update");
-            
-            await _analyticsService.UpdateAnalyticsCacheAsync(cancellationToken);
-            
-            context.WriteLine("Analytics cache updated successfully");
-        }
-        catch (Exception ex)
-        {
-            context.WriteLine("Error occurred on update analytics cache");
-            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Failed to update analytics cache"));
-        }
+        context.WriteLine("Starting analytics cache update");
+
+        await _analyticsService.UpdateAnalyticsCacheAsync(cancellationToken);
+
+        context.WriteLine("Analytics cache updated successfully");
     }
-} 
+}

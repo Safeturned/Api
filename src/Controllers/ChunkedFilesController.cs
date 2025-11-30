@@ -10,6 +10,7 @@ using Safeturned.Api.Models;
 using Safeturned.Api.Services;
 using Safeturned.FileChecker;
 using Safeturned.FileChecker.Modules;
+using Sentry;
 
 namespace Safeturned.Api.Controllers;
 
@@ -87,6 +88,7 @@ public class ChunkedFilesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error initiating upload session for file {FileName}", request.FileName);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error initiating upload session"));
             return StatusCode(500, "Internal server error");
         }
     }
@@ -154,6 +156,7 @@ public class ChunkedFilesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error uploading chunk {ChunkIndex} for session {SessionId}", request.ChunkIndex, request.SessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error uploading chunk"));
             return StatusCode(500, "Internal server error");
         }
     }
@@ -346,6 +349,7 @@ public class ChunkedFilesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error completing upload for session {SessionId}", request.SessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error completing upload"));
             return StatusCode(500, "Internal server error");
         }
     }
@@ -380,6 +384,7 @@ public class ChunkedFilesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error getting upload status for session {SessionId}", sessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error getting upload status"));
             return StatusCode(500, "Internal server error");
         }
     }
@@ -414,6 +419,7 @@ public class ChunkedFilesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error cancelling upload session {SessionId}", sessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error cancelling upload session"));
             return StatusCode(500, "Internal server error");
         }
     }

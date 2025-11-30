@@ -4,6 +4,7 @@ using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
+using Sentry;
 
 namespace Safeturned.Api.Services;
 
@@ -121,6 +122,7 @@ public class ChunkStorageService : IChunkStorageService
         catch (Exception ex)
         {
             _logger.Error(ex, "Error storing chunk {ChunkIndex} for session {SessionId}", chunkIndex, sessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error storing chunk"));
             return false;
         }
         finally
@@ -155,6 +157,7 @@ public class ChunkStorageService : IChunkStorageService
         catch (Exception ex)
         {
             _logger.Error(ex, "Error retrieving session {SessionId}", sessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error retrieving session"));
             return null;
         }
     }
@@ -204,6 +207,7 @@ public class ChunkStorageService : IChunkStorageService
         catch (Exception ex)
         {
             _logger.Error(ex, "Error completing upload for session {SessionId}", sessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error completing upload"));
             return false;
         }
         finally
@@ -289,6 +293,7 @@ public class ChunkStorageService : IChunkStorageService
         catch (Exception ex)
         {
             _logger.Error(ex, "Error assembling file for session {SessionId}", sessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error assembling file"));
             return null;
         }
         finally
@@ -332,6 +337,7 @@ public class ChunkStorageService : IChunkStorageService
         catch (Exception ex)
         {
             _logger.Error(ex, "Error cleaning up session {SessionId}", sessionId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error cleaning up session"));
         }
     }
 
@@ -362,6 +368,7 @@ public class ChunkStorageService : IChunkStorageService
         catch (Exception ex)
         {
             _logger.Error(ex, "Error cleaning up expired sessions");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error cleaning up expired sessions"));
         }
     }
 
@@ -377,6 +384,7 @@ public class ChunkStorageService : IChunkStorageService
         catch (Exception ex)
         {
             _logger.Error(ex, "Error getting active session count");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error getting active session count"));
             return 0;
         }
     }

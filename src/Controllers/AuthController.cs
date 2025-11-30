@@ -13,6 +13,7 @@ using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
+using Sentry;
 
 namespace Safeturned.Api.Controllers;
 
@@ -141,6 +142,7 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error processing OAuth callback");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error processing OAuth callback"));
             return StatusCode(500, new { error = "An error occurred during authentication" });
         }
     }
@@ -282,6 +284,7 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error exchanging Discord authorization code");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error exchanging Discord code"));
             return StatusCode(500, new { error = "An error occurred during authentication" });
         }
     }
@@ -396,6 +399,7 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error exchanging Steam authorization code");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error exchanging Steam code"));
             return StatusCode(500, new { error = "An error occurred during authentication" });
         }
     }

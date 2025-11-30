@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
+using Sentry;
 
 namespace Safeturned.Api.Controllers;
 
@@ -65,6 +66,7 @@ public class BadgesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error retrieving badges for user");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error retrieving badges for user"));
             return StatusCode(500, new { error = "Failed to retrieve badges" });
         }
     }
@@ -115,6 +117,7 @@ public class BadgesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error retrieving badge {BadgeId}", badgeId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error retrieving badge"));
             return StatusCode(500, new { error = "Failed to retrieve badge" });
         }
     }
@@ -200,6 +203,7 @@ public class BadgesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error creating badge");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error creating badge"));
             return StatusCode(500, new { error = "Failed to create badge" });
         }
     }
@@ -291,6 +295,7 @@ public class BadgesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error updating badge {BadgeId}", badgeId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error updating badge"));
             return StatusCode(500, new { error = "Failed to update badge" });
         }
     }
@@ -323,6 +328,7 @@ public class BadgesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error deleting badge {BadgeId}", badgeId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error deleting badge"));
             return StatusCode(500, new { error = "Failed to delete badge" });
         }
     }
@@ -366,6 +372,7 @@ public class BadgesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error regenerating token for badge {BadgeId}", badgeId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error regenerating token"));
             return StatusCode(500, new { error = "Failed to regenerate token" });
         }
     }
@@ -405,6 +412,7 @@ public class BadgesController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error toggling auto-update for badge {BadgeId}", badgeId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error toggling auto-update"));
             return StatusCode(500, new { error = "Failed to toggle auto-update" });
         }
     }

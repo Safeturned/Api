@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
+using Sentry;
 
 namespace Safeturned.Api.Controllers;
 
@@ -88,6 +89,7 @@ public class BadgeController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error generating badge for {BadgeId}", badgeId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error generating badge"));
             return Redirect("https://img.shields.io/badge/Safeturned-Error-red?style=flat");
         }
     }
@@ -144,6 +146,7 @@ public class BadgeController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error generating badge for filename {FileName}", filename);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error generating badge for filename"));
             return Redirect("https://img.shields.io/badge/Safeturned-Error-red?style=flat");
         }
     }
@@ -198,6 +201,7 @@ public class BadgeController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error generating badge for hash {Hash}", hash);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error generating badge for hash"));
             return Redirect("https://img.shields.io/badge/Safeturned-Error-red?style=flat");
         }
     }

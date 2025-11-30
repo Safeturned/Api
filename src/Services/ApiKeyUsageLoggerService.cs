@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Models;
+using Sentry;
 using HttpMethod = System.Net.Http.HttpMethod;
 
 namespace Safeturned.Api.Services;
@@ -36,6 +37,7 @@ public class ApiKeyUsageLoggerService : BackgroundService
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error logging API key usage for {ApiKeyId}", logRequest.ApiKeyId);
+                SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error logging API key usage"));
             }
         }
 

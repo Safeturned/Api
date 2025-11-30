@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
+using Sentry;
 
 namespace Safeturned.Api.Database;
 
@@ -35,10 +36,9 @@ public class AdminSeedService
             var adminEmail = _config.GetRequiredString("AdminSeed:Email");
             var adminDiscordId = _config.GetRequiredString("AdminSeed:DiscordId");
 
-            // Check if a user with this Discord identity already exists
             var existingUserIdentity = _context.Set<UserIdentity>()
-                .Include(ui => ui.User)
-                .FirstOrDefault(ui => ui.Provider == AuthProvider.Discord && ui.ProviderUserId == adminDiscordId);
+                .Include(x => x.User)
+                .FirstOrDefault(x => x.Provider == AuthProvider.Discord && x.ProviderUserId == adminDiscordId);
 
             if (existingUserIdentity?.User != null)
             {
@@ -50,7 +50,6 @@ public class AdminSeedService
                 return;
             }
 
-            // Create a new admin user (they must login via Discord to activate)
             var adminUser = new User
             {
                 Id = Guid.NewGuid(),
@@ -64,7 +63,6 @@ public class AdminSeedService
             _context.Set<User>().Add(adminUser);
             _context.SaveChanges();
 
-            // Create Discord identity for the admin user
             var discordIdentity = new UserIdentity
             {
                 Id = Guid.NewGuid(),
@@ -82,6 +80,7 @@ public class AdminSeedService
         catch (Exception ex)
         {
             _logger.Error(ex, "Failed to seed admin user");
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Failed to seed admin user"));
         }
     }
 }

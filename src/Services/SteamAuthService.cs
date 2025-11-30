@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
+using Sentry;
 
 namespace Safeturned.Api.Services;
 
@@ -88,6 +89,7 @@ public class SteamAuthService : ISteamAuthService
         catch (Exception ex)
         {
             _logger.Error(ex, "Error fetching Steam profile for {SteamId}", steamId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error fetching Steam profile"));
             return (null, null);
         }
     }

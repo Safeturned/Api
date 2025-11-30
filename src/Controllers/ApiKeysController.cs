@@ -6,6 +6,7 @@ using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
 using System.Security.Claims;
+using Sentry;
 
 namespace Safeturned.Api.Controllers;
 
@@ -120,6 +121,7 @@ public class ApiKeysController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Unexpected error creating API key for user {UserId}", userId);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Unexpected error creating API key"));
             return StatusCode(500, new { error = "Failed to create API key", message = ex.Message });
         }
     }

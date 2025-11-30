@@ -304,17 +304,14 @@ services.AddAuthentication(AuthConstants.BearerScheme)
 var allowedOrigins = config.GetSection("Security:AllowedOrigins").Get<string[]>();
 services.AddCors(options =>
 {
-    if (allowedOrigins != null && allowedOrigins.Length > 0)
+    options.AddPolicy("RestrictedCors", builder =>
     {
-        options.AddPolicy("RestrictedCors", builder =>
-        {
-            builder
-                .WithOrigins(allowedOrigins)
-                .AllowAnyMethod()
-                .AllowAnyHeader()
-                .AllowCredentials();
-        });
-    }
+        builder
+            .WithOrigins(allowedOrigins)
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
+    });
 });
 
 services.AddAuthorizationBuilder()

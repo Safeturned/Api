@@ -6,6 +6,7 @@ using Safeturned.Api.Constants;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
+using Sentry;
 
 namespace Safeturned.Api.Middleware;
 
@@ -81,6 +82,7 @@ public class ApiKeyRateLimitMiddleware
         catch (Exception ex)
         {
             _logger.Error(ex, "Error in rate limiting middleware for path {Path}", context.Request.Path);
+            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error in rate limiting middleware"));
 
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/json";
