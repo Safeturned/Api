@@ -94,11 +94,20 @@ jobs:
     - name: Install Aspire CLI
       run: dotnet tool install --global Aspire.Cli
 
-    - name: Publish with Aspire and build images
+    - name: Publish with Aspire
       run: |
         aspire publish -o ./publish/aspire
-        cd ./publish/aspire
-        docker compose build
+        
+    - name: Build Docker image with dotnet publish
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        dotnet publish ./src/Safeturned.Api.csproj \
+          -c Release \
+          -p:PublishProfile=DefaultContainer \
+          -p:ContainerRegistry=ghcr.io \
+          -p:ContainerRepository=safeturned/api \
+          -p:ContainerImageTags="v${VERSION}"
         
     - name: Login to GHCR
       uses: docker/login-action@v3
@@ -107,43 +116,16 @@ jobs:
         username: ${{ github.repository_owner }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Find and tag Docker image
+    - name: Tag and push Docker image
       run: |
         VERSION="${{ steps.version.outputs.version }}"
         BRANCH="${{ steps.branch.outputs.branch }}"
         
-        # Look for the built image with various possible names
-        BUILT_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "(safeturned-api|safeturned-api)" | head -n 1)
+        docker tag "ghcr.io/safeturned/api:v${VERSION}" "ghcr.io/safeturned/api:${BRANCH}"
         
-        if [ -z "$BUILT_IMAGE" ]; then
-          # Try to find any image with safeturned in the name
-          BUILT_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep safeturned | head -n 1)
-        fi
-        
-        if [ -z "$BUILT_IMAGE" ]; then
-          # List all images for debugging
-          echo "Available Docker images:"
-          docker images
-          echo "❌ No built image found"
-          exit 1
-        fi
-        
-        echo "Found built image: $BUILT_IMAGE"
-        
-        # Tag for GHCR with version and branch
-        docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:v${VERSION}"
-        docker tag "$BUILT_IMAGE" "ghcr.io/safeturned/api:${BRANCH}"
-        
-        echo "✅ Image tagged successfully"
-
-    - name: Push Docker image
-      run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        BRANCH="${{ steps.branch.outputs.branch }}"
-        
-        # Push both version and branch tags
         docker push "ghcr.io/safeturned/api:v${VERSION}"
         docker push "ghcr.io/safeturned/api:${BRANCH}"
+        
         echo "✅ Images pushed successfully"
 
     - name: Create deployment package
@@ -169,21 +151,14 @@ jobs:
         fi
         echo "Deploying version: $VERSION, branch: $BRANCH, environment: $ENVIRONMENT"
         
-        # Update .env file with environment variables for docker compose
-        # Replace or add SAFETURNED_API_IMAGE line
         if grep -q "^SAFETURNED_API_IMAGE=" .env 2>/dev/null; then
-            # Replace existing line
             sed -i "s|^SAFETURNED_API_IMAGE=.*|SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}|" .env
         else
-            # Add new line
             echo "SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}" >> .env
         fi
         
         docker compose down || true
-        
-        echo "Pulling image from registry..."
         docker pull ghcr.io/safeturned/api:v${VERSION} || echo "Image pull failed, will build locally"
-        
         docker compose up -d
         
         echo "Deployment completed successfully!"
