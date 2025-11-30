@@ -94,9 +94,11 @@ jobs:
     - name: Install Aspire CLI
       run: dotnet tool install --global Aspire.Cli
 
-    - name: Publish with Aspire
+    - name: Publish with Aspire and build images
       run: |
         aspire publish -o ./publish/aspire
+        cd ./publish/aspire
+        docker compose build
         
     - name: Login to GHCR
       uses: docker/login-action@v3
