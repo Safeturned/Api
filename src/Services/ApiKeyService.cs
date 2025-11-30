@@ -11,23 +11,26 @@ namespace Safeturned.Api.Services;
 
 public class ApiKeyService : IApiKeyService
 {
-    private readonly FilesDbContext _context;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger _logger;
     private readonly Channel<ApiKeyUsageLogRequest> _usageLogChannel;
 
     public ApiKeyService(
-        FilesDbContext context,
+        IServiceScopeFactory serviceScopeFactory,
         ILogger logger,
         Channel<ApiKeyUsageLogRequest> usageLogChannel)
     {
-        _context = context;
+        _serviceScopeFactory = serviceScopeFactory;
         _logger = logger.ForContext<ApiKeyService>();
         _usageLogChannel = usageLogChannel;
     }
 
-    public async Task<(ApiKey apiKey, string plainTextKey)> GenerateApiKeyAsync(Guid userId, string name, string prefix, DateTime? expiresAt, string scopes, string? ipWhitelist)
+    public async Task<(ApiKey apiKey, string plainTextKey)> GenerateApiKeyAsync(Guid userId, string name, string prefix, DateTime? expiresAt, ApiKeyScope scopes, string? ipWhitelist)
     {
-        var user = await _context.Set<User>().FindAsync(userId);
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var user = await db.Set<User>().FindAsync(userId);
         if (user == null)
         {
             _logger.Error("Cannot create API key: User {UserId} not found", userId);
@@ -37,7 +40,7 @@ public class ApiKeyService : IApiKeyService
         // Check API key limit for user's tier (admins bypass this limit)
         if (!user.IsAdmin)
         {
-            var activeKeyCount = await _context.Set<ApiKey>()
+            var activeKeyCount = await db.Set<ApiKey>()
                 .CountAsync(k => k.UserId == userId && k.IsActive);
             var maxKeys = TierConstants.GetMaxApiKeys(user.Tier);
 
@@ -54,9 +57,6 @@ public class ApiKeyService : IApiKeyService
         var keyHash = HashApiKey(plainTextKey);
         var lastSixChars = randomPart.Substring(randomPart.Length - ApiKeyConstants.KeyLastCharsLength);
 
-        var rateLimitTier = user.Tier;
-        var requestsPerHour = TierConstants.GetRateLimit(rateLimitTier);
-
         var apiKey = new ApiKey
         {
             Id = Guid.NewGuid(),
@@ -67,15 +67,13 @@ public class ApiKeyService : IApiKeyService
             LastSixChars = lastSixChars,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = expiresAt,
-            RateLimitTier = rateLimitTier,
-            RequestsPerHour = requestsPerHour,
             IsActive = true,
             Scopes = scopes,
             IpWhitelist = ipWhitelist
         };
 
-        _context.Set<ApiKey>().Add(apiKey);
-        await _context.SaveChangesAsync();
+        db.Set<ApiKey>().Add(apiKey);
+        await db.SaveChangesAsync();
 
         _logger.Information("Generated API key {ApiKeyId} for user {UserId}", apiKey.Id, userId);
 
@@ -83,64 +81,43 @@ public class ApiKeyService : IApiKeyService
     }
 
     public async Task<(ApiKey apiKey, string plainTextKey)> GenerateApiKeyWithCustomTierAsync(
-        Guid userId,
-        string name,
-        string prefix,
-        DateTime? expiresAt,
-        string scopes,
-        string? ipWhitelist,
-        TierType customTier,
-        int customRequestsPerHour)
+        Guid userId, string name, string prefix, DateTime? expiresAt, ApiKeyScope scopes, string? ipWhitelist, TierType customTier)
     {
-        var user = await _context.Set<User>().FindAsync(userId);
-        if (user == null)
-        {
-            _logger.Error("Cannot create API key: User {UserId} not found", userId);
-            throw new InvalidOperationException($"User {userId} not found");
-        }
-
-        var randomPart = GenerateSecureRandomString(ApiKeyConstants.KeyRandomLength);
-        var plainTextKey = $"{prefix}_{randomPart}";
-        var keyHash = HashApiKey(plainTextKey);
-        var lastSixChars = randomPart.Substring(randomPart.Length - ApiKeyConstants.KeyLastCharsLength);
-
-        var apiKey = new ApiKey
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            KeyHash = keyHash,
-            Name = name,
-            Prefix = prefix,
-            LastSixChars = lastSixChars,
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = expiresAt,
-            RateLimitTier = customTier,
-            RequestsPerHour = customRequestsPerHour,
-            IsActive = true,
-            Scopes = scopes,
-            IpWhitelist = ipWhitelist
-        };
-
-        _context.Set<ApiKey>().Add(apiKey);
-        await _context.SaveChangesAsync();
-
-        _logger.Information("Generated custom tier API key {ApiKeyId} for user {UserId} with tier {Tier} and {RequestsPerHour} requests/hour",
-            apiKey.Id, userId, customTier, customRequestsPerHour);
-
-        return (apiKey, plainTextKey);
+        // Note: This method is for admin use to create API keys with a specific tier for a user
+        // The tier is stored on the User model, not the ApiKey
+        // This currently reuses GenerateApiKeyAsync since the tier comes from the User
+        // If you need to change a user's tier, update the User record directly
+        return await GenerateApiKeyAsync(userId, name, prefix, expiresAt, scopes, ipWhitelist);
     }
 
     public async Task<ApiKey?> ValidateApiKeyAsync(string plainTextKey, string? clientIp = null)
     {
         var keyHash = HashApiKey(plainTextKey);
 
-        var apiKey = await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var apiKey = await db.Set<ApiKey>()
             .Include(k => k.User)
-            .FirstOrDefaultAsync(k => k.KeyHash == keyHash && k.IsActive);
+            .FirstOrDefaultAsync(k => k.KeyHash == keyHash);
 
         if (apiKey == null)
         {
             _logger.Warning("Invalid API key attempted");
+            return null;
+        }
+
+        if (!CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(apiKey.KeyHash),
+            Encoding.UTF8.GetBytes(keyHash)))
+        {
+            _logger.Warning("API key hash mismatch");
+            return null;
+        }
+
+        if (!apiKey.IsActive)
+        {
+            _logger.Warning("Inactive API key {ApiKeyId} attempted", apiKey.Id);
             return null;
         }
 
@@ -171,7 +148,10 @@ public class ApiKeyService : IApiKeyService
 
     public async Task<List<ApiKey>> GetUserApiKeysAsync(Guid userId)
     {
-        return await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        return await db.Set<ApiKey>()
             .Where(k => k.UserId == userId)
             .OrderByDescending(k => k.CreatedAt)
             .ToListAsync();
@@ -179,7 +159,10 @@ public class ApiKeyService : IApiKeyService
 
     public async Task<bool> RevokeApiKeyAsync(Guid apiKeyId, Guid userId)
     {
-        var apiKey = await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var apiKey = await db.Set<ApiKey>()
             .FirstOrDefaultAsync(k => k.Id == apiKeyId && k.UserId == userId);
 
         if (apiKey == null)
@@ -188,7 +171,7 @@ public class ApiKeyService : IApiKeyService
         }
 
         apiKey.IsActive = false;
-        await _context.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.Information("Revoked API key {ApiKeyId} for user {UserId}", apiKeyId, userId);
         return true;
@@ -196,7 +179,10 @@ public class ApiKeyService : IApiKeyService
 
     public async Task<ApiKey?> UpdateApiKeyAsync(Guid apiKeyId, Guid userId, string? name, string? ipWhitelist)
     {
-        var apiKey = await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var apiKey = await db.Set<ApiKey>()
             .FirstOrDefaultAsync(k => k.Id == apiKeyId && k.UserId == userId);
 
         if (apiKey == null)
@@ -211,7 +197,7 @@ public class ApiKeyService : IApiKeyService
 
         apiKey.IpWhitelist = ipWhitelist;
 
-        await _context.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.Information("Updated API key {ApiKeyId}", apiKeyId);
         return apiKey;
@@ -219,7 +205,10 @@ public class ApiKeyService : IApiKeyService
 
     public async Task<(ApiKey apiKey, string plainTextKey)?> RegenerateApiKeyAsync(Guid apiKeyId, Guid userId)
     {
-        var oldApiKey = await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var oldApiKey = await db.Set<ApiKey>()
             .FirstOrDefaultAsync(k => k.Id == apiKeyId && k.UserId == userId);
 
         if (oldApiKey == null)
@@ -238,7 +227,7 @@ public class ApiKeyService : IApiKeyService
             oldApiKey.IpWhitelist
         );
 
-        await _context.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _logger.Information("Regenerated API key {OldKeyId} -> {NewKeyId}", apiKeyId, newApiKey.Id);
         return (newApiKey, plainTextKey);
@@ -265,23 +254,29 @@ public class ApiKeyService : IApiKeyService
 
     public async Task UpdateLastUsedAsync(Guid apiKeyId)
     {
-        var apiKey = await _context.Set<ApiKey>().FindAsync(apiKeyId);
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var apiKey = await db.Set<ApiKey>().FindAsync(apiKeyId);
         if (apiKey != null)
         {
             apiKey.LastUsedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
     }
 
     public async Task<(int current, int max)> GetApiKeyLimitAsync(Guid userId)
     {
-        var user = await _context.Set<User>().FindAsync(userId);
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var user = await db.Set<User>().FindAsync(userId);
         if (user == null)
         {
             throw new InvalidOperationException($"User {userId} not found");
         }
 
-        var activeKeyCount = await _context.Set<ApiKey>()
+        var activeKeyCount = await db.Set<ApiKey>()
             .CountAsync(k => k.UserId == userId && k.IsActive);
 
         // Admins have unlimited API keys (represented as 9999)

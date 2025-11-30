@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Safeturned.Api.Constants;
 using Safeturned.Api.Controllers;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
@@ -13,13 +14,13 @@ namespace Safeturned.Api.Services;
 
 public class TokenService : ITokenService
 {
-    private readonly FilesDbContext _context;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IConfiguration _config;
     private readonly ILogger _logger;
 
-    public TokenService(FilesDbContext context, IConfiguration config, ILogger logger)
+    public TokenService(IServiceScopeFactory serviceScopeFactory, IConfiguration config, ILogger logger)
     {
-        _context = context;
+        _serviceScopeFactory = serviceScopeFactory;
         _config = config;
         _logger = logger.ForContext<TokenService>();
     }
@@ -29,7 +30,7 @@ public class TokenService : ITokenService
         var jwtSecret = _config.GetRequiredString("Jwt:SecretKey");
         var jwtIssuer = _config.GetRequiredString("Jwt:Issuer");
         var jwtAudience = _config.GetRequiredString("Jwt:Audience");
-        var expirationMinutes = int.Parse(_config.GetRequiredString("Jwt:ExpirationMinutes"));
+        var expirationMinutes = _config.GetValue<int?>("Jwt:ExpirationMinutes") ?? 60;
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -37,16 +38,19 @@ public class TokenService : ITokenService
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("tier", ((int)user.Tier).ToString()),
-            new Claim("is_admin", user.IsAdmin.ToString().ToLowerInvariant())
+            new Claim(AuthConstants.TierClaim, ((int)user.Tier).ToString()),
+            new Claim(AuthConstants.IsAdminClaim, user.IsAdmin.ToString().ToLowerInvariant())
         };
 
+        // Email is optional (Steam users don't have email)
+        if (!string.IsNullOrEmpty(user.Email))
+            claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
+
         if (!string.IsNullOrEmpty(user.Username))
-            claims.Add(new Claim("username", user.Username));
+            claims.Add(new Claim(AuthConstants.UsernameClaim, user.Username));
         if (!string.IsNullOrEmpty(user.AvatarUrl))
-            claims.Add(new Claim("avatar_url", user.AvatarUrl));
+            claims.Add(new Claim(AuthConstants.AvatarUrlClaim, user.AvatarUrl));
 
         var token = new JwtSecurityToken(
             issuer: jwtIssuer,
@@ -71,8 +75,12 @@ public class TokenService : ITokenService
             CreatedByIp = ipAddress
         };
 
-        _context.Set<RefreshToken>().Add(refreshToken);
-        await _context.SaveChangesAsync();
+
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        db.Set<RefreshToken>().Add(refreshToken);
+        await db.SaveChangesAsync();
 
         _logger.Information("Generated refresh token for user {UserId}", user.Id);
 
@@ -81,7 +89,10 @@ public class TokenService : ITokenService
 
     public async Task<User?> ValidateRefreshTokenAsync(string token)
     {
-        var refreshToken = await _context.Set<RefreshToken>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var refreshToken = await db.Set<RefreshToken>()
             .Include(rt => rt.User)
             .FirstOrDefaultAsync(rt => rt.Token == token && !rt.IsRevoked && rt.ExpiresAt > DateTime.UtcNow);
 
@@ -96,14 +107,17 @@ public class TokenService : ITokenService
 
     public async Task RevokeRefreshTokenAsync(string token)
     {
-        var refreshToken = await _context.Set<RefreshToken>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var refreshToken = await db.Set<RefreshToken>()
             .FirstOrDefaultAsync(rt => rt.Token == token);
 
         if (refreshToken != null)
         {
             refreshToken.IsRevoked = true;
             refreshToken.RevokedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            await db.SaveChangesAsync();
 
             _logger.Information("Revoked refresh token for user {UserId}", refreshToken.UserId);
         }
@@ -151,7 +165,10 @@ public class TokenService : ITokenService
 
     public async Task<List<LinkedIdentityResponse>> GetUserIdentitiesAsync(Guid userId)
     {
-        var identities = await _context.Set<UserIdentity>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var identities = await db.Set<UserIdentity>()
             .Where(ui => ui.UserId == userId)
             .OrderByDescending(ui => ui.LastAuthenticatedAt ?? ui.ConnectedAt)
             .ToListAsync();
@@ -170,14 +187,16 @@ public class TokenService : ITokenService
 
     public async Task<bool> UnlinkIdentityAsync(Guid userId, string providerName)
     {
-        // Parse provider name to enum
         if (!Enum.TryParse<AuthProvider>(providerName, true, out var provider))
         {
             _logger.Warning("Invalid provider name: {Provider}", providerName);
             return false;
         }
 
-        var identity = await _context.Set<UserIdentity>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var identity = await db.Set<UserIdentity>()
             .FirstOrDefaultAsync(ui => ui.UserId == userId && ui.Provider == provider);
 
         if (identity == null)
@@ -186,8 +205,8 @@ public class TokenService : ITokenService
             return false;
         }
 
-        _context.Set<UserIdentity>().Remove(identity);
-        await _context.SaveChangesAsync();
+        db.Set<UserIdentity>().Remove(identity);
+        await db.SaveChangesAsync();
 
         _logger.Information("Unlinked {Provider} identity for user {UserId}", providerName, userId);
         return true;

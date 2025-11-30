@@ -1,9 +1,16 @@
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using Asp.Versioning;
 using AspNet.Security.OAuth.Discord;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Safeturned.Api.Constants;
+using Safeturned.Api.Database;
+using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
 
@@ -18,41 +25,53 @@ public class AuthController : ControllerBase
     private readonly IDiscordAuthService _discordAuthService;
     private readonly ISteamAuthService _steamAuthService;
     private readonly ILogger _logger;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IWebHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public AuthController(
         ITokenService tokenService,
         IDiscordAuthService discordAuthService,
         ISteamAuthService steamAuthService,
-        ILogger logger)
+        ILogger logger,
+        IServiceScopeFactory serviceScopeFactory,
+        IWebHostEnvironment environment,
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory)
     {
         _tokenService = tokenService;
         _discordAuthService = discordAuthService;
         _steamAuthService = steamAuthService;
         _logger = logger.ForContext<AuthController>();
+        _serviceScopeFactory = serviceScopeFactory;
+        _environment = environment;
+        _configuration = configuration;
+        _httpClientFactory = httpClientFactory;
     }
 
     [HttpGet("discord")]
     public IActionResult DiscordLogin([FromQuery] string returnUrl = "/")
     {
+        returnUrl = ValidateAndSanitizeReturnUrl(returnUrl);
         _logger.Information("Discord login initiated with returnUrl: {ReturnUrl}", returnUrl);
 
-        // Don't validate returnUrl with IsLocalUrl since frontend is on different port
-        // Just ensure it's not empty
-        if (string.IsNullOrWhiteSpace(returnUrl))
-            returnUrl = "/";
+        var clientId = _configuration.GetRequiredString("Discord:ClientId");
+        var frontendUrl = _configuration.GetValue<string>("Frontend:Url") ?? "http://localhost:3000";
+        var callbackUrl = $"{frontendUrl}/auth/callback";
 
-        var properties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            Items =
-            {
-                ["returnUrl"] = returnUrl
-            }
-        };
+        // Build state parameter with returnUrl (don't double-encode - state will be encoded once by the URL)
+        var stateGuid = Guid.NewGuid().ToString();
+        var state = $"{stateGuid}|{returnUrl}";
+        
+        // Build Discord OAuth URL manually
+        var redirectUri = Uri.EscapeDataString(callbackUrl);
+        var scope = Uri.EscapeDataString("identify email");
+        var encodedState = Uri.EscapeDataString(state);
+        var discordAuthUrl = $"https://discord.com/api/oauth2/authorize?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope={scope}&state={encodedState}";
 
-        _logger.Information("Stored returnUrl in properties: {ReturnUrl}", returnUrl);
-
-        return Challenge(properties, DiscordAuthenticationDefaults.AuthenticationScheme);
+        _logger.Information("Redirecting to Discord OAuth with callback: {CallbackUrl}", callbackUrl);
+        return Redirect(discordAuthUrl);
     }
 
     [HttpGet("discord/callback")]
@@ -79,24 +98,28 @@ public class AuthController : ControllerBase
         var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
 
         result.Properties.Items.TryGetValue("returnUrl", out var returnUrl);
-        if (string.IsNullOrWhiteSpace(returnUrl))
-            returnUrl = "/";
+        returnUrl = ValidateAndSanitizeReturnUrl(returnUrl);
 
-        HttpContext.Response.Cookies.Append("access_token", accessToken, new CookieOptions
+        // Set cookies - use Lax in dev (localhost same-site), None in production (cross-origin)
+        var isProduction = _environment.IsProduction();
+        var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
+            Secure = isProduction,
+            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
             Expires = DateTimeOffset.UtcNow.AddMinutes(60)
-        });
+        };
 
-        HttpContext.Response.Cookies.Append("refresh_token", refreshToken.Token, new CookieOptions
+        var refreshCookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
+            Secure = isProduction,
+            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
             Expires = DateTimeOffset.UtcNow.AddDays(7)
-        });
+        };
+
+        HttpContext.Response.Cookies.Append(AuthConstants.AccessTokenCookie, accessToken, cookieOptions);
+        HttpContext.Response.Cookies.Append(AuthConstants.RefreshTokenCookie, refreshToken.Token, refreshCookieOptions);
 
         return Redirect(returnUrl);
     }
@@ -104,23 +127,23 @@ public class AuthController : ControllerBase
     [HttpGet("steam")]
     public IActionResult SteamLogin([FromQuery] string returnUrl = "/")
     {
+        returnUrl = ValidateAndSanitizeReturnUrl(returnUrl);
         _logger.Information("Steam login initiated with returnUrl: {ReturnUrl}", returnUrl);
 
-        if (string.IsNullOrWhiteSpace(returnUrl))
-            returnUrl = "/";
+        var frontendUrl = _configuration.GetValue<string>("Frontend:Url") ?? "http://localhost:3000";
+        var callbackUrl = $"{frontendUrl}/auth/callback";
 
-        var properties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            Items =
-            {
-                ["returnUrl"] = returnUrl
-            }
-        };
+        // Build state parameter with returnUrl (don't double-encode - state will be encoded once by the URL)
+        var stateGuid = Guid.NewGuid().ToString();
+        var state = $"{stateGuid}|{returnUrl}";
+        
+        // Build Steam OpenID URL manually
+        var returnTo = Uri.EscapeDataString($"{callbackUrl}?state={Uri.EscapeDataString(state)}");
+        var realm = Uri.EscapeDataString(frontendUrl);
+        var steamAuthUrl = $"https://steamcommunity.com/openid/login?openid.ns=http://specs.openid.net/auth/2.0&openid.mode=checkid_setup&openid.return_to={returnTo}&openid.realm={realm}&openid.identity=http://specs.openid.net/auth/2.0/identifier_select&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select&openid.ns.sreg=http://openid.net/extensions/sreg/1.1&openid.sreg.optional=nickname,email,fullname";
 
-        _logger.Information("Stored returnUrl in properties: {ReturnUrl}", returnUrl);
-
-        return Challenge(properties, "Steam");
+        _logger.Information("Redirecting to Steam OpenID with callback: {CallbackUrl}", callbackUrl);
+        return Redirect(steamAuthUrl);
     }
 
     [HttpGet("steam/callback")]
@@ -145,26 +168,287 @@ public class AuthController : ControllerBase
         var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
 
         result.Properties.Items.TryGetValue("returnUrl", out var returnUrl);
-        if (string.IsNullOrWhiteSpace(returnUrl))
-            returnUrl = "/";
+        returnUrl = ValidateAndSanitizeReturnUrl(returnUrl);
 
-        HttpContext.Response.Cookies.Append("access_token", accessToken, new CookieOptions
+        // Set cookies - use Lax in dev (localhost same-site), None in production (cross-origin)
+        var isProduction = _environment.IsProduction();
+        var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
+            Secure = isProduction,
+            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
             Expires = DateTimeOffset.UtcNow.AddMinutes(60)
-        });
+        };
 
-        HttpContext.Response.Cookies.Append("refresh_token", refreshToken.Token, new CookieOptions
+        var refreshCookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
+            Secure = isProduction,
+            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
             Expires = DateTimeOffset.UtcNow.AddDays(7)
-        });
+        };
+
+        HttpContext.Response.Cookies.Append(AuthConstants.AccessTokenCookie, accessToken, cookieOptions);
+        HttpContext.Response.Cookies.Append(AuthConstants.RefreshTokenCookie, refreshToken.Token, refreshCookieOptions);
 
         return Redirect(returnUrl);
+    }
+
+    [HttpPost("discord/exchange")]
+    public async Task<IActionResult> ExchangeDiscordCode([FromBody] OAuthExchangeRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Code))
+        {
+            return BadRequest(new { error = "Authorization code is required" });
+        }
+
+        try
+        {
+            var clientId = _configuration.GetRequiredString("Discord:ClientId");
+            var clientSecret = _configuration.GetRequiredString("Discord:ClientSecret");
+            var frontendUrl = _configuration.GetValue<string>("Frontend:Url") ?? "http://localhost:3000";
+            var redirectUri = $"{frontendUrl}/auth/callback";
+
+            // Exchange authorization code for access token
+            var httpClient = _httpClientFactory.CreateClient();
+            var tokenRequest = new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["grant_type"] = "authorization_code",
+                ["code"] = request.Code,
+                ["redirect_uri"] = redirectUri
+            };
+
+            var tokenResponse = await httpClient.PostAsync(
+                "https://discord.com/api/oauth2/token",
+                new FormUrlEncodedContent(tokenRequest));
+
+            if (!tokenResponse.IsSuccessStatusCode)
+            {
+                var errorContent = await tokenResponse.Content.ReadAsStringAsync();
+                _logger.Error("Discord token exchange failed: {Error}", errorContent);
+                return BadRequest(new { error = "Failed to exchange authorization code" });
+            }
+
+            var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
+            var tokenData = JsonDocument.Parse(tokenJson);
+            var accessToken = tokenData.RootElement.GetProperty("access_token").GetString();
+
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return BadRequest(new { error = "Failed to obtain access token" });
+            }
+
+            // Get user info from Discord
+            httpClient.DefaultRequestHeaders.Authorization = 
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            
+            var userResponse = await httpClient.GetAsync("https://discord.com/api/users/@me");
+            if (!userResponse.IsSuccessStatusCode)
+            {
+                _logger.Error("Failed to fetch Discord user info");
+                return BadRequest(new { error = "Failed to fetch user information" });
+            }
+
+            var userJson = await userResponse.Content.ReadAsStringAsync();
+            var userData = JsonDocument.Parse(userJson);
+            
+            var discordId = userData.RootElement.GetProperty("id").GetString();
+            var email = userData.RootElement.TryGetProperty("email", out var emailElement) 
+                ? emailElement.GetString() 
+                : null;
+            var username = userData.RootElement.GetProperty("username").GetString();
+            var avatar = userData.RootElement.TryGetProperty("avatar", out var avatarElement) 
+                ? avatarElement.GetString() 
+                : null;
+
+            // Build avatar URL
+            string? avatarUrl = null;
+            if (!string.IsNullOrEmpty(avatar) && !string.IsNullOrEmpty(discordId))
+            {
+                var extension = avatar.StartsWith("a_") ? "gif" : "png";
+                avatarUrl = $"https://cdn.discordapp.com/avatars/{discordId}/{avatar}.{extension}?size=1024";
+            }
+
+            if (string.IsNullOrEmpty(discordId) || string.IsNullOrEmpty(username))
+            {
+                return BadRequest(new { error = "Invalid user data from Discord" });
+            }
+
+            // Create or update user
+            var user = await _discordAuthService.HandleDiscordCallbackAsync(
+                discordId, 
+                email ?? string.Empty, 
+                username, 
+                avatarUrl);
+
+            // Generate tokens
+            var jwtAccessToken = _tokenService.GenerateAccessToken(user);
+            var ipAddress = HttpContext.GetIPAddress();
+            var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
+
+            // Set cookies - SameSite=None requires Secure=true (Chrome enforces this even on localhost)
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true, // Required when using SameSite=None
+                SameSite = SameSiteMode.None, // Required for cross-port requests (localhost:3000 → localhost:5000)
+                Expires = DateTimeOffset.UtcNow.AddMinutes(60)
+            };
+
+            var refreshCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true, // Required when using SameSite=None
+                SameSite = SameSiteMode.None, // Required for cross-port requests
+                Expires = DateTimeOffset.UtcNow.AddDays(7)
+            };
+
+            HttpContext.Response.Cookies.Append(AuthConstants.AccessTokenCookie, jwtAccessToken, cookieOptions);
+            HttpContext.Response.Cookies.Append(AuthConstants.RefreshTokenCookie, refreshToken.Token, refreshCookieOptions);
+
+            _logger.Information("Discord OAuth exchange successful for user {UserId}", user.Id);
+
+            // Return user data
+            var identities = await GetUserIdentitiesAsync(user.Id.ToString());
+
+            return Ok(new
+            {
+                id = user.Id.ToString(),
+                email = user.Email,
+                username = user.Username,
+                avatarUrl = user.AvatarUrl,
+                tier = (int)user.Tier,
+                isAdmin = user.IsAdmin,
+                linkedIdentities = identities,
+                returnUrl = ExtractReturnUrlFromState(request.State)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error exchanging Discord authorization code");
+            return StatusCode(500, new { error = "An error occurred during authentication" });
+        }
+    }
+
+    [HttpPost("steam/exchange")]
+    public async Task<IActionResult> ExchangeSteamCode([FromBody] SteamExchangeRequest request)
+    {
+        if (string.IsNullOrEmpty(request.OpenIdMode) || request.OpenIdMode != "id_res")
+        {
+            return BadRequest(new { error = "Invalid OpenID response" });
+        }
+
+        try
+        {
+            // Steam OpenID validation
+            var steamApiKey = _configuration.GetRequiredString("Steam:ApiKey");
+            
+            // Use the actual return_to from the request, not construct our own
+            // Steam includes the exact return_to in the response, we must use it for validation
+            var returnTo = request.OpenIdReturnTo;
+            if (string.IsNullOrEmpty(returnTo))
+            {
+                _logger.Error("Steam OpenID return_to is missing");
+                return BadRequest(new { error = "Invalid Steam authentication response - missing return_to" });
+            }
+
+            // Validate the OpenID response
+            var validationParams = new Dictionary<string, string>
+            {
+                ["openid.ns"] = "http://specs.openid.net/auth/2.0",
+                ["openid.mode"] = "check_authentication",
+                ["openid.op_endpoint"] = request.OpenIdOpEndpoint ?? "https://steamcommunity.com/openid/login",
+                ["openid.claimed_id"] = request.OpenIdClaimedId ?? "",
+                ["openid.identity"] = request.OpenIdIdentity ?? "",
+                ["openid.return_to"] = returnTo, // Use the exact return_to from Steam's response
+                ["openid.response_nonce"] = request.OpenIdResponseNonce ?? "",
+                ["openid.assoc_handle"] = request.OpenIdAssocHandle ?? "",
+                ["openid.signed"] = request.OpenIdSigned ?? "",
+                ["openid.sig"] = request.OpenIdSig ?? ""
+            };
+
+            var httpClient = _httpClientFactory.CreateClient();
+            var validationResponse = await httpClient.PostAsync(
+                "https://steamcommunity.com/openid/login",
+                new FormUrlEncodedContent(validationParams));
+
+            if (!validationResponse.IsSuccessStatusCode)
+            {
+                _logger.Error("Steam OpenID validation failed");
+                return BadRequest(new { error = "Failed to validate Steam authentication" });
+            }
+
+            var validationContent = await validationResponse.Content.ReadAsStringAsync();
+            _logger.Information("Steam OpenID validation response: {Response}", validationContent);
+            
+            if (!validationContent.Contains("is_valid:true"))
+            {
+                _logger.Error("Steam OpenID validation returned invalid. Response: {Response}", validationContent);
+                return BadRequest(new { error = "Invalid Steam authentication response" });
+            }
+
+            // Extract Steam ID from claimed_id
+            var claimedId = request.OpenIdClaimedId ?? "";
+            if (!claimedId.Contains("/id/"))
+            {
+                return BadRequest(new { error = "Invalid Steam ID format" });
+            }
+
+            var steamId = claimedId.Split(new[] { "/id/" }, StringSplitOptions.None).Last();
+            var username = request.OpenIdIdentity?.Split('/').Last() ?? steamId;
+
+            // Create or update user
+            var user = await _steamAuthService.HandleSteamCallbackAsync(steamId, username);
+
+            // Generate tokens
+            var accessToken = _tokenService.GenerateAccessToken(user);
+            var ipAddress = HttpContext.GetIPAddress();
+            var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user, ipAddress);
+
+            // Set cookies - SameSite=None requires Secure=true (Chrome enforces this even on localhost)
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true, // Required when using SameSite=None
+                SameSite = SameSiteMode.None, // Required for cross-port requests (localhost:3000 → localhost:5000)
+                Expires = DateTimeOffset.UtcNow.AddMinutes(60)
+            };
+
+            var refreshCookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true, // Required when using SameSite=None
+                SameSite = SameSiteMode.None, // Required for cross-port requests
+                Expires = DateTimeOffset.UtcNow.AddDays(7)
+            };
+
+            HttpContext.Response.Cookies.Append(AuthConstants.AccessTokenCookie, accessToken, cookieOptions);
+            HttpContext.Response.Cookies.Append(AuthConstants.RefreshTokenCookie, refreshToken.Token, refreshCookieOptions);
+
+            _logger.Information("Steam OAuth exchange successful for user {UserId}", user.Id);
+
+            // Return user data
+            var identities = await GetUserIdentitiesAsync(user.Id.ToString());
+
+            return Ok(new
+            {
+                id = user.Id.ToString(),
+                email = user.Email,
+                username = user.Username,
+                avatarUrl = user.AvatarUrl,
+                tier = (int)user.Tier,
+                isAdmin = user.IsAdmin,
+                linkedIdentities = identities,
+                returnUrl = ExtractReturnUrlFromState(request.State)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error exchanging Steam authorization code");
+            return StatusCode(500, new { error = "An error occurred during authentication" });
+        }
     }
 
     [HttpPost("refresh")]
@@ -199,9 +483,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("logout")]
     [Authorize]
-    public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
+    public async Task<IActionResult> Logout([FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] LogoutRequest? request = null)
     {
-        if (!string.IsNullOrEmpty(request.RefreshToken))
+        if (request != null && !string.IsNullOrEmpty(request.RefreshToken))
         {
             await _tokenService.RevokeRefreshTokenAsync(request.RefreshToken);
         }
@@ -215,9 +499,27 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> GetCurrentUser()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId) || !Guid.TryParse(userId, out var userGuid))
+        {
+            return Unauthorized();
+        }
+
+        // Fetch user with identities to get avatar and username
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var user = await filesDb.Set<User>()
+            .Include(u => u.Identities)
+            .FirstOrDefaultAsync(u => u.Id == userGuid);
+
+        if (user == null)
+        {
+            return Unauthorized();
+        }
+
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
-        var tierClaim = User.FindFirst("tier")?.Value;
-        var isAdmin = User.FindFirst("is_admin")?.Value;
+        var tierClaim = User.FindFirst(AuthConstants.TierClaim)?.Value;
+        var isAdmin = User.FindFirst(AuthConstants.IsAdminClaim)?.Value;
 
         int tier = 0;
         if (!string.IsNullOrEmpty(tierClaim) && int.TryParse(tierClaim, out var parsedTier))
@@ -230,7 +532,9 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             id = userId,
-            email,
+            email = user.Email,
+            username = user.Username,
+            avatarUrl = user.AvatarUrl,
             tier,
             isAdmin = bool.Parse(isAdmin ?? "false"),
             linkedIdentities = identities
@@ -293,8 +597,44 @@ public class AuthController : ControllerBase
 
         return await _tokenService.GetUserIdentitiesAsync(userGuid);
     }
+
+    private static string? ExtractReturnUrlFromState(string? state)
+    {
+        if (string.IsNullOrEmpty(state))
+            return null;
+
+        var parts = state.Split('|', 2);
+        return parts.Length == 2 ? Uri.UnescapeDataString(parts[1]) : null;
+    }
+
+    private static string ValidateAndSanitizeReturnUrl(string? returnUrl)
+    {
+        // Default to root if no returnUrl provided
+        if (string.IsNullOrWhiteSpace(returnUrl))
+            return "/";
+
+        // Only allow local URLs (must start with / but not //)
+        // This prevents open redirect attacks to external domains
+        if (returnUrl.StartsWith('/') && !returnUrl.StartsWith("//"))
+            return returnUrl;
+
+        // If returnUrl is not local, default to root
+        return "/";
+    }
 }
 
 public record RefreshTokenRequest(string RefreshToken);
 public record LogoutRequest(string? RefreshToken);
 public record UnlinkIdentityRequest(string ProviderName);
+public record OAuthExchangeRequest(string Code, string? State = null);
+public record SteamExchangeRequest(
+    string OpenIdMode,
+    string? OpenIdOpEndpoint = null,
+    string? OpenIdClaimedId = null,
+    string? OpenIdIdentity = null,
+    string? OpenIdReturnTo = null,
+    string? OpenIdResponseNonce = null,
+    string? OpenIdAssocHandle = null,
+    string? OpenIdSigned = null,
+    string? OpenIdSig = null,
+    string? State = null);

@@ -2,22 +2,52 @@ using Safeturned.Api.Database.Models;
 
 namespace Safeturned.Api.Constants;
 
+public enum RateLimitTier
+{
+    Read = 0,
+    Write = 1,
+    Expensive = 2
+}
+
 public static class TierConstants
 {
-    public const int TierFree = 0;
-    public const int TierVerified = 1;
-    public const int TierPremium = 2;
-    public const int TierBot = 3;
+    public static readonly int TierFree = (int)TierType.Free;
+    public static readonly int TierVerified = (int)TierType.Verified;
+    public static readonly int TierPremium = (int)TierType.Premium;
+    public static readonly int TierBot = (int)TierType.Bot;
 
-    public const int RateLimitFree = 60;
-    public const int RateLimitVerified = 300;
-    public const int RateLimitPremium = 1000;
-    public const int RateLimitBot = 10000;
+    public static readonly RateLimitTier[] AllOperationTiers =
+    [
+        RateLimitTier.Read,
+        RateLimitTier.Write,
+        RateLimitTier.Expensive
+    ];
 
-    public const int FileSizeLimitFree = 100;
-    public const int FileSizeLimitVerified = 200;
-    public const int FileSizeLimitPremium = 500;
-    public const int FileSizeLimitBot = 500;
+    public const int RateLimitAdmin = 999999;
+
+    public const int GuestReadLimit = 200;
+    public const int GuestWriteLimit = 30;
+    public const int GuestExpensiveLimit = 10;
+
+    public const int FreeReadLimit = 2000;
+    public const int FreeWriteLimit = 150;
+    public const int FreeExpensiveLimit = 30;
+
+    public const int VerifiedReadLimit = 5000;
+    public const int VerifiedWriteLimit = 500;
+    public const int VerifiedExpensiveLimit = 75;
+
+    public const int PremiumReadLimit = 15000;
+    public const int PremiumWriteLimit = 2000;
+    public const int PremiumExpensiveLimit = 200;
+
+    public const int BotReadLimit = 50000;
+    public const int BotWriteLimit = 20000;
+    public const int BotExpensiveLimit = 1000;
+
+    // File upload limits (same for all tiers due to Cloudflare and chunked upload design)
+    public const int MaxChunkSize = 100; // MB - Cloudflare limit per request
+    public const int MaxTotalFileSize = 500; // MB - Total file size via chunked upload
 
     public const int MaxApiKeysFree = 3;
     public const int MaxApiKeysVerified = 5;
@@ -26,30 +56,6 @@ public static class TierConstants
 
     public const int BotBurstLimit = 100;
     public static readonly TimeSpan BotBurstWindow = TimeSpan.FromMinutes(1);
-
-    public static int GetRateLimit(TierType tier)
-    {
-        return tier switch
-        {
-            TierType.Free => RateLimitFree,
-            TierType.Verified => RateLimitVerified,
-            TierType.Premium => RateLimitPremium,
-            TierType.Bot => RateLimitBot,
-            _ => RateLimitFree
-        };
-    }
-
-    public static int GetFileSizeLimit(TierType tier)
-    {
-        return tier switch
-        {
-            TierType.Free => FileSizeLimitFree,
-            TierType.Verified => FileSizeLimitVerified,
-            TierType.Premium => FileSizeLimitPremium,
-            TierType.Bot => FileSizeLimitBot,
-            _ => FileSizeLimitFree
-        };
-    }
 
     public static int GetMaxApiKeys(TierType tier)
     {
@@ -66,5 +72,40 @@ public static class TierConstants
     public static bool HasPrioritySupport(TierType tier)
     {
         return tier != TierType.Free;
+    }
+
+    public static int GetOperationRateLimit(TierType tier, RateLimitTier operationTier)
+    {
+        return (tier, operationTier) switch
+        {
+            (TierType.Free, RateLimitTier.Read) => FreeReadLimit,
+            (TierType.Free, RateLimitTier.Write) => FreeWriteLimit,
+            (TierType.Free, RateLimitTier.Expensive) => FreeExpensiveLimit,
+
+            (TierType.Verified, RateLimitTier.Read) => VerifiedReadLimit,
+            (TierType.Verified, RateLimitTier.Write) => VerifiedWriteLimit,
+            (TierType.Verified, RateLimitTier.Expensive) => VerifiedExpensiveLimit,
+
+            (TierType.Premium, RateLimitTier.Read) => PremiumReadLimit,
+            (TierType.Premium, RateLimitTier.Write) => PremiumWriteLimit,
+            (TierType.Premium, RateLimitTier.Expensive) => PremiumExpensiveLimit,
+
+            (TierType.Bot, RateLimitTier.Read) => BotReadLimit,
+            (TierType.Bot, RateLimitTier.Write) => BotWriteLimit,
+            (TierType.Bot, RateLimitTier.Expensive) => BotExpensiveLimit,
+
+            _ => FreeReadLimit
+        };
+    }
+
+    public static int GetGuestOperationRateLimit(RateLimitTier operationTier)
+    {
+        return operationTier switch
+        {
+            RateLimitTier.Read => GuestReadLimit,
+            RateLimitTier.Write => GuestWriteLimit,
+            RateLimitTier.Expensive => GuestExpensiveLimit,
+            _ => GuestReadLimit
+        };
     }
 }

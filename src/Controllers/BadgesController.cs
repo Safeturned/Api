@@ -50,13 +50,13 @@ public class BadgesController : ControllerBase
                     b.Description,
                     b.CreatedAt,
                     b.UpdatedAt,
-                    LinkedFile = new
+                    LinkedFile = b.LinkedFile != null ? new
                     {
                         b.LinkedFile.Hash,
                         b.LinkedFile.FileName,
                         b.LinkedFile.Score,
                         b.LinkedFile.LastScanned
-                    }
+                    } : null
                 })
                 .ToListAsync();
 
@@ -75,6 +75,8 @@ public class BadgesController : ControllerBase
     {
         try
         {
+            _logger.Debug("Looking up badge with ID: {BadgeId}", badgeId);
+
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
 
@@ -84,7 +86,12 @@ public class BadgesController : ControllerBase
                 .FirstOrDefaultAsync(b => b.Id == badgeId);
 
             if (badge == null)
+            {
+                _logger.Warning("Badge not found for ID: {BadgeId}", badgeId);
                 return NotFound(new { error = "Badge not found" });
+            }
+
+            _logger.Debug("Badge found: {BadgeId}, Name: {BadgeName}", badge.Id, badge.Name);
 
             return Ok(new
             {
@@ -96,13 +103,13 @@ public class BadgesController : ControllerBase
                 badge.LinkedFileHash,
                 badge.RequireTokenForUpdate,
                 badge.VersionUpdateCount,
-                LinkedFile = new
+                LinkedFile = badge.LinkedFile != null ? new
                 {
                     badge.LinkedFile.Hash,
                     badge.LinkedFile.FileName,
                     badge.LinkedFile.Score,
                     badge.LinkedFile.LastScanned
-                }
+                } : null
             });
         }
         catch (Exception ex)
@@ -144,7 +151,8 @@ public class BadgesController : ControllerBase
             var badgeId = $"badge_{Guid.NewGuid():N}".Substring(0, 20);
 
             var plainToken = BadgeTokenHelper.GenerateToken();
-            var hashedToken = BadgeTokenHelper.HashToken(plainToken);
+            var salt = BadgeTokenHelper.GenerateSalt();
+            var hashedToken = BadgeTokenHelper.HashToken(plainToken, salt);
 
             var badge = new Badge
             {
@@ -159,6 +167,7 @@ public class BadgesController : ControllerBase
                 TrackedAssemblyProduct = fileData.AssemblyProduct,
                 TrackedAssemblyGuid = fileData.AssemblyGuid,
                 TrackedFileName = fileData.FileName,
+                UpdateSalt = salt,
                 UpdateToken = hashedToken,
                 RequireTokenForUpdate = request.EnableAutoUpdate ?? false
             };
@@ -185,8 +194,7 @@ public class BadgesController : ControllerBase
                     fileData.FileName,
                     fileData.Score,
                     fileData.LastScanned
-                },
-                BadgeUrl = $"/api/v1.0/badge/{badge.Id}"
+                }
             });
         }
         catch (Exception ex)
@@ -271,13 +279,13 @@ public class BadgesController : ControllerBase
                 updatedBadge.Description,
                 updatedBadge.CreatedAt,
                 updatedBadge.UpdatedAt,
-                LinkedFile = new
+                LinkedFile = updatedBadge.LinkedFile != null ? new
                 {
                     updatedBadge.LinkedFile.Hash,
                     updatedBadge.LinkedFile.FileName,
                     updatedBadge.LinkedFile.Score,
                     updatedBadge.LinkedFile.LastScanned
-                }
+                } : null
             });
         }
         catch (Exception ex)
@@ -338,8 +346,10 @@ public class BadgesController : ControllerBase
                 return NotFound(new { error = "Badge not found" });
 
             var plainToken = BadgeTokenHelper.GenerateToken();
-            var hashedToken = BadgeTokenHelper.HashToken(plainToken);
+            var salt = BadgeTokenHelper.GenerateSalt();
+            var hashedToken = BadgeTokenHelper.HashToken(plainToken, salt);
 
+            badge.UpdateSalt = salt;
             badge.UpdateToken = hashedToken;
             badge.UpdatedAt = DateTime.UtcNow;
 
@@ -350,7 +360,6 @@ public class BadgesController : ControllerBase
             return Ok(new
             {
                 message = "Token regenerated successfully",
-                // Return plain token - this is the only time it's visible!
                 updateToken = plainToken
             });
         }

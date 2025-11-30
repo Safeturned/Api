@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using Microsoft.Net.Http.Headers;
+using Safeturned.Api.Constants;
 using Safeturned.Api.Database.Models;
 
 namespace Safeturned.Api.Helpers;
@@ -27,30 +28,37 @@ public static class HttpContextExtensions
         return true;
     }
     /// <summary>
-    /// Cloudflare and Azure changes the actual client IP by replacing default headers to its own IPs of the Cloudflare or something else,
-    /// this will get a real client IP instead.
+    /// Gets the client IP address, handling proxy scenarios securely.
+    /// Priority: CF-CONNECTING-IP (Cloudflare) > RemoteIpAddress > X-Forwarded-For rightmost
     /// </summary>
     public static string GetIPAddress(this HttpContext source)
     {
-        // Check X-Forwarded-For first (more reliable for getting real client IP)
-        var forwardedFor = source.Request.Headers["X-Forwarded-For"].ToString();
+        if (!string.IsNullOrEmpty(source.Request.Headers[NetworkConstants.CloudflareIpHeader]))
+        {
+            return source.Request.Headers[NetworkConstants.CloudflareIpHeader]!.ToString();
+        }
+
+        var remoteIp = source.Connection.RemoteIpAddress?.ToString();
+        if (!string.IsNullOrEmpty(remoteIp) && remoteIp != NetworkConstants.LocalhostIpV6 && remoteIp != NetworkConstants.LocalhostIpV4)
+        {
+            return remoteIp;
+        }
+
+        var forwardedFor = source.Request.Headers[NetworkConstants.ForwardedForHeader].ToString();
         if (!string.IsNullOrEmpty(forwardedFor))
         {
-            var addresses = forwardedFor.Split(',');
-            if (addresses.Length != 0)
+            var addresses = forwardedFor.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (addresses.Length > 0)
             {
-                // Take the FIRST IP (original client IP), not the last
-                return addresses[0].Trim();
+                var rightmostIp = addresses[addresses.Length - 1];
+                if (System.Net.IPAddress.TryParse(rightmostIp, out _))
+                {
+                    return rightmostIp;
+                }
             }
         }
 
-        // Fallback to CF-CONNECTING-IP if X-Forwarded-For is not available
-        if (!string.IsNullOrEmpty(source.Request.Headers["CF-CONNECTING-IP"]))
-        {
-            return source.Request.Headers["CF-CONNECTING-IP"]!;
-        }
-
-        return source.Connection.RemoteIpAddress!.ToString();
+        return remoteIp ?? NetworkConstants.UnknownIpAddress;
     }
     public static string GetIPAddress(this IHttpContextAccessor accessor)
     {
@@ -58,12 +66,12 @@ public static class HttpContextExtensions
     }
     public static (Guid? userId, Guid? apiKeyId) GetUserContext(this HttpContext httpContext)
     {
-        var userId = httpContext.Items["UserId"] as Guid?;
-        var apiKeyId = httpContext.Items["ApiKeyId"] as Guid?;
+        var userId = httpContext.Items[HttpContextItemKeys.UserId] as Guid?;
+        var apiKeyId = httpContext.Items[HttpContextItemKeys.ApiKeyId] as Guid?;
         if (userId == null)
         {
             var user = httpContext.User;
-            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.FindFirst("sub")?.Value;
+            var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.FindFirst(AuthConstants.SubClaim)?.Value;
             if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var parsedUserId))
             {
                 userId = parsedUserId;

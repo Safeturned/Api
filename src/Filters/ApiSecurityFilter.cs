@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
 using Safeturned.Api.Constants;
+using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
 using Safeturned.Api.Services;
@@ -22,7 +23,7 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
 
         if (securitySettings.RequireApiKey)
         {
-            var apiKeyHeader = context.HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+            var apiKeyHeader = context.HttpContext.Request.Headers[AuthConstants.ApiKeyHeader].FirstOrDefault();
             if (!string.IsNullOrEmpty(apiKeyHeader) &&
                 apiKeyService != null &&
                 (apiKeyHeader.StartsWith(ApiKeyConstants.LivePrefix) || apiKeyHeader.StartsWith(ApiKeyConstants.TestPrefix)))
@@ -37,13 +38,13 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
                     return;
                 }
 
-                context.HttpContext.Items["UserId"] = apiKey.UserId;
-                context.HttpContext.Items["ApiKeyId"] = apiKey.Id;
-                context.HttpContext.Items["User"] = apiKey.User;
-                context.HttpContext.Items["ApiKey"] = apiKey;
+                context.HttpContext.Items[HttpContextItemKeys.UserId] = apiKey.UserId;
+                context.HttpContext.Items[HttpContextItemKeys.ApiKeyId] = apiKey.Id;
+                context.HttpContext.Items[HttpContextItemKeys.User] = apiKey.User;
+                context.HttpContext.Items[HttpContextItemKeys.ApiKey] = apiKey;
 
                 var requiredScope = GetRequiredScope(context);
-                if (!string.IsNullOrEmpty(requiredScope) && !HasScope(apiKey.Scopes, requiredScope))
+                if (!string.IsNullOrEmpty(requiredScope) && !ApiKeyScopeHelper.HasScope(apiKey.Scopes, requiredScope))
                 {
                     logger.Warning("API key {ApiKeyId} lacks required scope: {RequiredScope}", apiKey.Id, requiredScope);
                     context.Result = new ForbidResult();
@@ -92,7 +93,7 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
 
     private static bool ValidateApiKey(ActionExecutingContext context, string expectedApiKey)
     {
-        var apiKey = context.HttpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+        var apiKey = context.HttpContext.Request.Headers[AuthConstants.ApiKeyHeader].FirstOrDefault();
         return !string.IsNullOrEmpty(apiKey) && apiKey == expectedApiKey;
     }
 
@@ -113,7 +114,7 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
             return allowedOrigins.Any(allowedOrigin =>
                 referer.StartsWith(allowedOrigin, StringComparison.OrdinalIgnoreCase));
         }
-        var forwardedHost = context.HttpContext.Request.Headers["X-Forwarded-Host"].ToString();
+        var forwardedHost = context.HttpContext.Request.Headers[NetworkConstants.ForwardedHostHeader].ToString();
         if (!string.IsNullOrEmpty(forwardedHost))
         {
             var forwardedHostName = forwardedHost.Split(',')[0].Trim(); // Take first host if multiple
@@ -129,7 +130,7 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
 
     private static string? GetRequiredScope(ActionExecutingContext context)
     {
-        var path = context.HttpContext.Request.Path.Value?.ToLower() ?? "";
+        var path = context.HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "";
         if (path.Contains("/files") && HttpMethods.IsPost(context.HttpContext.Request.Method))
         {
             return "analyze";
@@ -143,11 +144,5 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
             return "read";
         }
         return null;
-    }
-
-    private static bool HasScope(string scopes, string requiredScope)
-    {
-        var scopeList = scopes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return scopeList.Contains(requiredScope, StringComparer.OrdinalIgnoreCase);
     }
 }

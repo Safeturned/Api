@@ -1,7 +1,6 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
@@ -9,7 +8,6 @@ using Safeturned.Api.Database.Models;
 using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
-using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Services;
 using Safeturned.FileChecker;
 using Safeturned.FileChecker.Modules;
@@ -43,7 +41,6 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost]
-    [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
     public async Task<IActionResult> UploadFile(IFormFile file, bool forceAnalyze, CancellationToken cancellationToken = default)
     {
         if (file == null || file.Length == 0)
@@ -141,7 +138,7 @@ public class FilesController : ControllerBase
 
                     foreach (var badge in badges)
                     {
-                        if (BadgeTokenHelper.VerifyToken(badgeToken, badge.UpdateToken!))
+                        if (BadgeTokenHelper.VerifyToken(badgeToken, badge.UpdateToken!, badge.UpdateSalt))
                         {
                             _logger.Information("Badge {BadgeId} auto-updating via token to hash {Hash}",
                                 badge.Id, fileData.Hash);
@@ -244,7 +241,6 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("{hash}")]
-    [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
     public async Task<IActionResult> GetFileResult(string hash, CancellationToken cancellationToken = default)
     {
         try
@@ -264,7 +260,6 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("filename/{filename}")]
-    [EnableRateLimiting(KnownRateLimitPolicies.UploadFile)]
     public async Task<IActionResult> GetFileByFilename(string filename, CancellationToken cancellationToken = default)
     {
         try
@@ -306,7 +301,6 @@ public class FilesController : ControllerBase
 
     [HttpGet("analytics/range")]
     [Authorize(Policy = KnownAuthPolicies.AdminOnly)]
-    [EnableRateLimiting(KnownRateLimitPolicies.AnalyticsWithDateRange)]
     public async Task<IActionResult> GetAnalyticsWithDateRange([FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken cancellationToken = default)
     {
         try

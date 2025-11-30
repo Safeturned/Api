@@ -24,7 +24,7 @@ public class UserIdentity
     [MaxLength(255)]
     public string? AvatarUrl { get; set; }
 
-    public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
+    public DateTime ConnectedAt { get; set; }
 
     public DateTime? LastAuthenticatedAt { get; set; }
 

@@ -27,7 +27,7 @@ public class AnalyticsCacheUpdateJob
         }
         catch (Exception ex)
         {
-            context.WriteLine("Error occured on update analytics cache");
+            context.WriteLine("Error occurred on update analytics cache");
             SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Failed to update analytics cache"));
         }
     }

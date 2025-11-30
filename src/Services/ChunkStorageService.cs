@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
+using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
@@ -58,11 +59,20 @@ public class ChunkStorageService : IChunkStorageService
 
     public async Task<bool> StoreChunkAsync(string sessionId, int chunkIndex, IFormFile chunkFile, string chunkHash, CancellationToken cancellationToken = default)
     {
+        if (!Guid.TryParse(sessionId, out _))
+        {
+            _logger.Warning("Invalid sessionId format: {SessionId}", sessionId);
+            return false;
+        }
+
         var sessionLock = SessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
 
-        await sessionLock.WaitAsync(cancellationToken);
+        bool lockAcquired = false;
         try
         {
+            await sessionLock.WaitAsync(cancellationToken);
+            lockAcquired = true;
+
             var session = await GetSessionAsync(sessionId, cancellationToken);
             if (session == null)
             {
@@ -77,7 +87,7 @@ public class ChunkStorageService : IChunkStorageService
             }
 
             var sessionDirectory = Path.Combine(_chunksDirectory, sessionId);
-            var chunkFilePath = Path.Combine(sessionDirectory, $"chunk_{chunkIndex:D3}.dat");
+            var chunkFilePath = Path.Combine(sessionDirectory, string.Format(ChunkStorageConstants.ChunkFileNameFormat, chunkIndex));
 
             await using (var fileStream = new FileStream(chunkFilePath, FileMode.Create, FileAccess.Write, FileShare.None, _configuration.GetValue<int>("UploadLimits:FileBufferSize"), FileOptions.SequentialScan))
             {
@@ -86,7 +96,7 @@ public class ChunkStorageService : IChunkStorageService
                 await fileStream.FlushAsync(cancellationToken);
             }
 
-            await Task.Delay(10, cancellationToken);
+            await Task.Delay(ChunkStorageConstants.FileSystemSettleDelayMs, cancellationToken);
             var computedHash = await HashHelper.ComputeFileHashWithRetryAsync(chunkFilePath, cancellationToken);
             if (!string.Equals(computedHash, chunkHash, StringComparison.OrdinalIgnoreCase))
             {
@@ -115,12 +125,15 @@ public class ChunkStorageService : IChunkStorageService
         }
         finally
         {
-            sessionLock.Release();
-
-            if (await IsSessionCompletedOrExpiredAsync(sessionId, cancellationToken))
+            if (lockAcquired)
             {
-                SessionLocks.TryRemove(sessionId, out var lockToDispose);
-                lockToDispose?.Dispose();
+                sessionLock.Release();
+
+                if (await IsSessionCompletedOrExpiredAsync(sessionId, cancellationToken))
+                {
+                    SessionLocks.TryRemove(sessionId, out var lockToDispose);
+                    lockToDispose?.Dispose();
+                }
             }
         }
     }
@@ -148,13 +161,25 @@ public class ChunkStorageService : IChunkStorageService
 
     public async Task<bool> CompleteUploadAsync(string sessionId, CancellationToken cancellationToken = default)
     {
+        var sessionLock = SessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+
+        bool lockAcquired = false;
         try
         {
+            await sessionLock.WaitAsync(cancellationToken);
+            lockAcquired = true;
+
             var session = await GetSessionAsync(sessionId, cancellationToken);
             if (session == null)
             {
                 _logger.Warning("Session {SessionId} not found for completion", sessionId);
                 return false;
+            }
+
+            if (session.IsCompleted)
+            {
+                _logger.Warning("Session {SessionId} already completed", sessionId);
+                return true;
             }
 
             if (session.UploadedChunks.Any(chunk => !chunk))
@@ -181,12 +206,31 @@ public class ChunkStorageService : IChunkStorageService
             _logger.Error(ex, "Error completing upload for session {SessionId}", sessionId);
             return false;
         }
+        finally
+        {
+            if (lockAcquired)
+            {
+                sessionLock.Release();
+            }
+        }
     }
 
     public async Task<string?> AssembleFileAsync(string sessionId, CancellationToken cancellationToken = default)
     {
+        if (!Guid.TryParse(sessionId, out _))
+        {
+            _logger.Warning("Invalid sessionId format: {SessionId}", sessionId);
+            return null;
+        }
+
+        var sessionLock = SessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+
+        bool lockAcquired = false;
         try
         {
+            await sessionLock.WaitAsync(cancellationToken);
+            lockAcquired = true;
+
             var session = await GetSessionAsync(sessionId, cancellationToken);
             if (session == null)
             {
@@ -194,16 +238,28 @@ public class ChunkStorageService : IChunkStorageService
                 return null;
             }
 
-            var sessionDirectory = Path.Combine(_chunksDirectory, sessionId);
-            var finalFilePath = Path.Combine(sessionDirectory, "final_file.dat");
+            if (!session.IsCompleted)
+            {
+                _logger.Warning("Session {SessionId} not completed before assembly", sessionId);
+                return null;
+            }
 
-            await using (var outputStream = new FileStream(finalFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.SequentialScan))
+            var sessionDirectory = Path.Combine(_chunksDirectory, sessionId);
+            var finalFilePath = Path.Combine(sessionDirectory, ChunkStorageConstants.FinalFileName);
+
+            if (File.Exists(finalFilePath))
+            {
+                _logger.Information("File already assembled for session {SessionId}, returning existing file", sessionId);
+                return finalFilePath;
+            }
+
+            await using (var outputStream = new FileStream(finalFilePath, FileMode.Create, FileAccess.Write, FileShare.None, ChunkStorageConstants.DefaultFileBufferSize, FileOptions.SequentialScan))
             {
                 for (int i = 0; i < session.TotalChunks; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    var chunkFilePath = Path.Combine(sessionDirectory, $"chunk_{i:D3}.dat");
+                    var chunkFilePath = Path.Combine(sessionDirectory, string.Format(ChunkStorageConstants.ChunkFileNameFormat, i));
 
                     if (!File.Exists(chunkFilePath))
                     {
@@ -211,14 +267,14 @@ public class ChunkStorageService : IChunkStorageService
                         return null;
                     }
 
-                    await using var chunkStream = new FileStream(chunkFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
+                    await using var chunkStream = new FileStream(chunkFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, ChunkStorageConstants.DefaultFileBufferSize, FileOptions.SequentialScan);
                     await chunkStream.CopyToAsync(outputStream, cancellationToken);
                 }
 
                 await outputStream.FlushAsync(cancellationToken);
             }
 
-            await Task.Delay(10, cancellationToken);
+            await Task.Delay(ChunkStorageConstants.FileSystemSettleDelayMs, cancellationToken);
             var finalFileHash = await HashHelper.ComputeFileHashWithRetryAsync(finalFilePath, cancellationToken);
             if (!string.Equals(finalFileHash, session.FileHash, StringComparison.OrdinalIgnoreCase))
             {
@@ -235,10 +291,24 @@ public class ChunkStorageService : IChunkStorageService
             _logger.Error(ex, "Error assembling file for session {SessionId}", sessionId);
             return null;
         }
+        finally
+        {
+            if (lockAcquired)
+            {
+                sessionLock.Release();
+            }
+        }
     }
 
     public async Task CleanupSessionAsync(string sessionId, CancellationToken cancellationToken = default)
     {
+        // Validate sessionId is a valid GUID to prevent path traversal attacks
+        if (!Guid.TryParse(sessionId, out _))
+        {
+            _logger.Warning("Invalid sessionId format: {SessionId}", sessionId);
+            return;
+        }
+
         try
         {
             var sessionDirectory = Path.Combine(_chunksDirectory, sessionId);

@@ -122,7 +122,7 @@ public class AnalyticsService : IAnalyticsService
 
             if (analytics.TotalFilesScanned > 0)
             {
-                analytics.ThreatDetectionRate = (double)analytics.TotalThreatsDetected / analytics.TotalFilesScanned * 100;
+                analytics.ThreatDetectionRate = (double)analytics.TotalThreatsDetected / analytics.TotalFilesScanned * Constants.RateLimitConstants.PercentageMultiplier;
 
                 analytics.AverageScanTimeMs = await query.AverageAsync(r => r.ScanTimeMs, cancellationToken);
                 analytics.TotalScanTimeMs = await query.SumAsync(r => r.ScanTimeMs, cancellationToken);

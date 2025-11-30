@@ -12,21 +12,20 @@ public interface IApiKeyService
         string name,
         string prefix,
         DateTime? expiresAt,
-        string scopes,
+        ApiKeyScope scopes,
         string? ipWhitelist);
 
     /// <summary>
-    /// Generates a new API key for a user with custom tier and rate limit (admin only)
+    /// Generates a new API key for a user with custom tier (admin only)
     /// </summary>
     Task<(ApiKey apiKey, string plainTextKey)> GenerateApiKeyWithCustomTierAsync(
         Guid userId,
         string name,
         string prefix,
         DateTime? expiresAt,
-        string scopes,
+        ApiKeyScope scopes,
         string? ipWhitelist,
-        TierType customTier,
-        int customRequestsPerHour);
+        TierType customTier);
 
     /// <summary>
     /// Validates an API key and returns the associated key record

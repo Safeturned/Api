@@ -2,9 +2,11 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace Safeturned.Api.Controllers;
 
@@ -14,13 +16,16 @@ namespace Safeturned.Api.Controllers;
 [Authorize]
 public class UsageController : ControllerBase
 {
-    private readonly FilesDbContext _context;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger _logger;
+    private readonly IDistributedCache _cache;
+    private static readonly TimeSpan HourlyWindowDuration = TimeSpan.FromHours(1);
 
-    public UsageController(FilesDbContext context, ILogger logger)
+    public UsageController(IServiceScopeFactory serviceScopeFactory, ILogger logger, IDistributedCache cache)
     {
-        _context = context;
+        _serviceScopeFactory = serviceScopeFactory;
         _logger = logger.ForContext<UsageController>();
+        _cache = cache;
     }
 
     [HttpGet("summary")]
@@ -28,28 +33,31 @@ public class UsageController : ControllerBase
     {
         var userId = GetUserId();
 
-        var apiKeyIds = await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var apiKeyIds = await db.Set<ApiKey>()
             .AsNoTracking()
             .Where(k => k.UserId == userId)
             .Select(k => k.Id)
             .ToListAsync();
 
-        var totalRequests = await _context.Set<ApiKeyUsage>()
+        var totalRequests = await db.Set<ApiKeyUsage>()
             .AsNoTracking()
             .Where(u => apiKeyIds.Contains(u.ApiKeyId))
             .CountAsync();
 
-        var last30DaysRequests = await _context.Set<ApiKeyUsage>()
+        var last30DaysRequests = await db.Set<ApiKeyUsage>()
             .AsNoTracking()
             .Where(u => apiKeyIds.Contains(u.ApiKeyId) && u.RequestedAt >= DateTime.UtcNow.AddDays(-30))
             .CountAsync();
 
-        var averageResponseTime = await _context.Set<ApiKeyUsage>()
+        var averageResponseTime = await db.Set<ApiKeyUsage>()
             .AsNoTracking()
             .Where(u => apiKeyIds.Contains(u.ApiKeyId))
             .AverageAsync(u => (double?)u.ResponseTimeMs) ?? 0;
 
-        var successRate = await _context.Set<ApiKeyUsage>()
+        var successRate = await db.Set<ApiKeyUsage>()
             .AsNoTracking()
             .Where(u => apiKeyIds.Contains(u.ApiKeyId))
             .GroupBy(u => 1)
@@ -61,15 +69,15 @@ public class UsageController : ControllerBase
             .FirstOrDefaultAsync();
 
         var successRatePercent = successRate != null && successRate.total > 0
-            ? (double)successRate.successful / successRate.total * 100
+            ? (double)successRate.successful / successRate.total * Constants.RateLimitConstants.PercentageMultiplier
             : 100.0;
 
         return Ok(new
         {
             totalRequests,
             last30DaysRequests,
-            averageResponseTime = Math.Round(averageResponseTime, 2),
-            successRate = Math.Round(successRatePercent, 2)
+            averageResponseTime = Math.Round(averageResponseTime, Constants.RateLimitConstants.DecimalPlacesForRounding),
+            successRate = Math.Round(successRatePercent, Constants.RateLimitConstants.DecimalPlacesForRounding)
         });
     }
 
@@ -78,9 +86,13 @@ public class UsageController : ControllerBase
     {
         var userId = GetUserId();
 
-        if (days < 1 || days > 90) days = 30;
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
 
-        var apiKeyIds = await _context.Set<ApiKey>()
+        if (days < 1 || days > 90)
+            days = 30;
+
+        var apiKeyIds = await db.Set<ApiKey>()
             .AsNoTracking()
             .Where(k => k.UserId == userId)
             .Select(k => k.Id)
@@ -88,7 +100,7 @@ public class UsageController : ControllerBase
 
         var startDate = DateTime.UtcNow.AddDays(-days).Date;
 
-        var dailyUsage = await _context.Set<ApiKeyUsage>()
+        var dailyUsage = await db.Set<ApiKeyUsage>()
             .AsNoTracking()
             .Where(u => apiKeyIds.Contains(u.ApiKeyId) && u.RequestedAt >= startDate)
             .GroupBy(u => u.RequestedAt.Date)
@@ -97,19 +109,24 @@ public class UsageController : ControllerBase
                 date = g.Key,
                 requests = g.Count(),
                 averageResponseTime = g.Average(u => u.ResponseTimeMs),
-                errors = g.Count(u => u.StatusCode >= 400)
+                errors = g.Count(u => u.StatusCode >= 500)
             })
             .OrderBy(d => d.date)
             .ToListAsync();
+
+        var dailyUsageDict = dailyUsage.ToDictionary(
+            d => new DateTime(d.date.Year, d.date.Month, d.date.Day, 0, 0, 0, DateTimeKind.Utc),
+            d => d
+        );
 
         var allDates = Enumerable.Range(0, days)
             .Select(i => startDate.AddDays(i))
             .Select(date => new
             {
                 date,
-                requests = dailyUsage.FirstOrDefault(d => d.date == date)?.requests ?? 0,
-                averageResponseTime = dailyUsage.FirstOrDefault(d => d.date == date)?.averageResponseTime ?? 0,
-                errors = dailyUsage.FirstOrDefault(d => d.date == date)?.errors ?? 0
+                requests = dailyUsageDict.TryGetValue(date, out var usage) ? usage.requests : 0,
+                averageResponseTime = dailyUsageDict.TryGetValue(date, out var usageForAvg) ? usageForAvg.averageResponseTime : 0,
+                errors = dailyUsageDict.TryGetValue(date, out var usageForErrors) ? usageForErrors.errors : 0
             })
             .ToList();
 
@@ -121,36 +138,31 @@ public class UsageController : ControllerBase
     {
         var userId = GetUserId();
 
-        var apiKeyIds = await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var apiKeyIds = await db.Set<ApiKey>()
             .AsNoTracking()
             .Where(k => k.UserId == userId)
             .Select(k => k.Id)
             .ToListAsync();
 
-        var endpointUsage = await _context.Set<ApiKeyUsage>()
+        var endpointUsage = await db.Set<ApiKeyUsage>()
             .AsNoTracking()
             .Where(u => apiKeyIds.Contains(u.ApiKeyId))
-            .GroupBy(u => u.EndpointId)
+            .GroupBy(u => new { u.EndpointId, u.Endpoint.Path })
             .Select(g => new
             {
-                endpointId = g.Key,
+                endpoint = g.Key.Path,
                 requests = g.Count(),
-                averageResponseTime = g.Average(u => u.ResponseTimeMs),
-                errors = g.Count(u => u.StatusCode >= 400)
+                averageResponseTime = Math.Round(g.Average(u => u.ResponseTimeMs), Constants.RateLimitConstants.DecimalPlacesForRounding),
+                errors = g.Count(u => u.StatusCode >= 500)
             })
             .OrderByDescending(e => e.requests)
             .Take(10)
             .ToListAsync();
 
-        var result = endpointUsage.Select(e => new
-        {
-            endpoint = EndpointRegistry.GetEndpoint(e.endpointId) ?? $"Unknown ({e.endpointId})",
-            e.requests,
-            averageResponseTime = Math.Round(e.averageResponseTime, 2),
-            e.errors
-        });
-
-        return Ok(result);
+        return Ok(endpointUsage);
     }
 
     [HttpGet("methods")]
@@ -158,13 +170,16 @@ public class UsageController : ControllerBase
     {
         var userId = GetUserId();
 
-        var apiKeyIds = await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var apiKeyIds = await db.Set<ApiKey>()
             .AsNoTracking()
             .Where(k => k.UserId == userId)
             .Select(k => k.Id)
             .ToListAsync();
 
-        var methodUsage = await _context.Set<ApiKeyUsage>()
+        var methodUsage = await db.Set<ApiKeyUsage>()
             .AsNoTracking()
             .Where(u => apiKeyIds.Contains(u.ApiKeyId))
             .GroupBy(u => u.Method)
@@ -190,13 +205,16 @@ public class UsageController : ControllerBase
     {
         var userId = GetUserId();
 
-        var apiKeyIds = await _context.Set<ApiKey>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var apiKeyIds = await db.Set<ApiKey>()
             .AsNoTracking()
             .Where(k => k.UserId == userId)
             .Select(k => k.Id)
             .ToListAsync();
 
-        var statusCodes = await _context.Set<ApiKeyUsage>()
+        var statusCodes = await db.Set<ApiKeyUsage>()
             .AsNoTracking()
             .Where(u => apiKeyIds.Contains(u.ApiKeyId))
             .GroupBy(u => u.StatusCode)
@@ -214,9 +232,18 @@ public class UsageController : ControllerBase
     [HttpGet("rate-limit")]
     public async Task<IActionResult> GetRateLimitUsage()
     {
+        return await GetRateLimitUsageV2();
+    }
+
+    [HttpGet("rate-limit-v2")]
+    public async Task<IActionResult> GetRateLimitUsageV2()
+    {
         var userId = GetUserId();
 
-        var user = await _context.Set<User>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var user = await db.Set<User>()
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
 
@@ -225,57 +252,66 @@ public class UsageController : ControllerBase
             return NotFound(new { error = "User not found" });
         }
 
-        var apiKeyIds = await _context.Set<ApiKey>()
+        var apiKeyIds = await db.Set<ApiKey>()
             .AsNoTracking()
             .Where(k => k.UserId == userId && k.IsActive)
             .Select(k => k.Id)
             .ToListAsync();
 
-        var oneHourAgo = DateTime.UtcNow.AddHours(-1);
-        var currentUsage = await _context.Set<ApiKeyUsage>()
-            .AsNoTracking()
-            .Where(u => apiKeyIds.Contains(u.ApiKeyId) && u.RequestedAt >= oneHourAgo)
-            .CountAsync();
+        var isAdmin = user.IsAdmin;
+        var tier = user.Tier;
 
-        var maxRequests = user.IsAdmin ? 99999 : Constants.TierConstants.GetRateLimit(user.Tier);
+        var operationLimits = new List<object>();
 
-        var now = DateTime.UtcNow;
-        var currentMinute = now.Minute;
-        var nextHourReset = now.AddHours(1).AddMinutes(-currentMinute).AddSeconds(-now.Second).AddMilliseconds(-now.Millisecond);
-        var minutesUntilReset = (int)(nextHourReset - now).TotalMinutes;
-        var secondsUntilReset = (int)(nextHourReset - now).TotalSeconds;
-
-        var usagePercent = maxRequests > 0 ? Math.Round((double)currentUsage / maxRequests * 100, 2) : 0;
-
-        var oldestRequest = await _context.Set<ApiKeyUsage>()
-            .AsNoTracking()
-            .Where(u => apiKeyIds.Contains(u.ApiKeyId) && u.RequestedAt >= oneHourAgo)
-            .OrderBy(u => u.RequestedAt)
-            .Select(u => u.RequestedAt)
-            .FirstOrDefaultAsync();
-
-        DateTime resetTime;
-        if (oldestRequest != default)
+        foreach (var operationTier in Constants.TierConstants.AllOperationTiers)
         {
-            resetTime = oldestRequest.AddHours(1);
-        }
-        else
-        {
-            resetTime = nextHourReset;
+            var limit = isAdmin ? Constants.TierConstants.RateLimitAdmin : Constants.TierConstants.GetOperationRateLimit(tier, operationTier);
+
+            var cacheKey = string.Format(Constants.RateLimitConstants.CacheKeyUserFormat, operationTier.ToString().ToLowerInvariant(), userId);
+            var requestLogBytes = await _cache.GetAsync(cacheKey);
+            var requestLog = requestLogBytes != null
+                ? JsonSerializer.Deserialize<List<DateTime>>(requestLogBytes) ?? new List<DateTime>()
+                : new List<DateTime>();
+
+            var cutoffTime = DateTime.UtcNow.Subtract(HourlyWindowDuration);
+            var recentRequests = requestLog.Where(time => time > cutoffTime).ToList();
+            var current = recentRequests.Count;
+            var remaining = Math.Max(0, limit - current);
+            var usagePercent = limit > 0
+                ? Math.Round((double)current / limit * Constants.RateLimitConstants.PercentageMultiplier, Constants.RateLimitConstants.DecimalPlacesForRounding)
+                : 0;
+
+            DateTime resetTime;
+            if (recentRequests.Count > 0)
+            {
+                var oldestRequest = recentRequests.Min();
+                resetTime = oldestRequest.Add(HourlyWindowDuration);
+            }
+            else
+            {
+                resetTime = DateTime.UtcNow.Add(HourlyWindowDuration);
+            }
+
+            operationLimits.Add(new
+            {
+                operation = operationTier.ToString(),
+                current,
+                limit,
+                remaining,
+                usagePercent,
+                resetTime,
+                isNearLimit = usagePercent >= Constants.RateLimitConstants.NearLimitThresholdPercent,
+                isOverLimit = current >= limit
+            });
         }
 
         return Ok(new
         {
-            current = currentUsage,
-            max = maxRequests,
-            remaining = Math.Max(0, maxRequests - currentUsage),
-            usagePercent,
-            resetTime,
-            minutesUntilReset,
-            secondsUntilReset,
-            isNearLimit = usagePercent >= 80,
-            isOverLimit = currentUsage >= maxRequests,
-            tier = user.Tier.ToString()
+            tier = (int)tier,
+            tierName = tier.ToString(),
+            isAdmin,
+            hasApiKeys = apiKeyIds.Count > 0,
+            operations = operationLimits
         });
     }
 

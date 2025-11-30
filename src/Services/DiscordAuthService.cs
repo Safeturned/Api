@@ -6,12 +6,12 @@ namespace Safeturned.Api.Services;
 
 public class DiscordAuthService : IDiscordAuthService
 {
-    private readonly FilesDbContext _context;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger _logger;
 
-    public DiscordAuthService(FilesDbContext context, ILogger logger)
+    public DiscordAuthService(IServiceScopeFactory serviceScopeFactory, ILogger logger)
     {
-        _context = context;
+        _serviceScopeFactory = serviceScopeFactory;
         _logger = logger.ForContext<DiscordAuthService>();
     }
 
@@ -24,7 +24,10 @@ public class DiscordAuthService : IDiscordAuthService
 
     public async Task<User> GetOrCreateUserAsync(string discordId, string email, string username, string? avatarUrl)
     {
-        var existingIdentity = await _context.Set<UserIdentity>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var existingIdentity = await db.Set<UserIdentity>()
             .Include(ui => ui.User)
             .FirstOrDefaultAsync(ui => ui.Provider == AuthProvider.Discord && ui.ProviderUserId == discordId);
 
@@ -39,7 +42,7 @@ public class DiscordAuthService : IDiscordAuthService
                 existingIdentity.User.Email = email;
             }
 
-            await _context.SaveChangesAsync();
+            await db.SaveChangesAsync();
             _logger.Information("Updated existing Discord identity for user {UserId}", existingIdentity.UserId);
             return existingIdentity.User;
         }
@@ -47,7 +50,7 @@ public class DiscordAuthService : IDiscordAuthService
         User? userByEmail = null;
         if (!string.IsNullOrEmpty(email))
         {
-            userByEmail = await _context.Set<User>()
+            userByEmail = await db.Set<User>()
                 .FirstOrDefaultAsync(u => u.Email == email);
         }
 
@@ -69,8 +72,8 @@ public class DiscordAuthService : IDiscordAuthService
                 IsAdmin = false
             };
 
-            _context.Set<User>().Add(user);
-            await _context.SaveChangesAsync();
+            db.Set<User>().Add(user);
+            await db.SaveChangesAsync();
             _logger.Information("Created new user {UserId} from Discord", user.Id);
         }
 
@@ -86,8 +89,8 @@ public class DiscordAuthService : IDiscordAuthService
             LastAuthenticatedAt = DateTime.UtcNow
         };
 
-        _context.Set<UserIdentity>().Add(discordIdentity);
-        await _context.SaveChangesAsync();
+        db.Set<UserIdentity>().Add(discordIdentity);
+        await db.SaveChangesAsync();
 
         _logger.Information("Created Discord identity for user {UserId}", user.Id);
         return user;
@@ -95,11 +98,14 @@ public class DiscordAuthService : IDiscordAuthService
 
     public async Task UpdateLastLoginAsync(Guid userId)
     {
-        var user = await _context.Set<User>().FindAsync(userId);
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var user = await db.Set<User>().FindAsync(userId);
         if (user != null)
         {
             user.LastLoginAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
     }
 }

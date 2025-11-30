@@ -48,11 +48,23 @@ public class ApiKeyUsageLoggerService : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
 
         var httpMethod = ParseHttpMethod(request.Method);
-        var endpointId = EndpointRegistry.GetOrCreateEndpointId(request.Endpoint);
+        var endpointId = await GetOrCreateEndpointIdAsync(request.Endpoint, context, cancellationToken);
+
+        // Get UserId from the API key
+        var apiKey = await context.Set<ApiKey>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(k => k.Id == request.ApiKeyId, cancellationToken);
+
+        if (apiKey == null)
+        {
+            _logger.Warning("API key {ApiKeyId} not found, skipping usage log", request.ApiKeyId);
+            return;
+        }
 
         var usage = new ApiKeyUsage
         {
             ApiKeyId = request.ApiKeyId,
+            UserId = apiKey.UserId,
             EndpointId = endpointId,
             Method = httpMethod,
             StatusCode = request.StatusCode,
@@ -68,6 +80,20 @@ public class ApiKeyUsageLoggerService : BackgroundService
             request.ApiKeyId, request.Method, request.Endpoint);
     }
 
+    private static async Task<int> GetOrCreateEndpointIdAsync(string path, FilesDbContext context, CancellationToken cancellationToken)
+    {
+        var endpoint = await context.Set<Database.Models.Endpoint>()
+            .FirstOrDefaultAsync(e => e.Path == path, cancellationToken);
+
+        if (endpoint != null)
+            return endpoint.Id;
+
+        endpoint = new Database.Models.Endpoint { Path = path };
+        context.Set<Database.Models.Endpoint>().Add(endpoint);
+        await context.SaveChangesAsync(cancellationToken);
+        return endpoint.Id;
+    }
+
     private static HttpMethodType ParseHttpMethod(string method) => method.ToUpperInvariant() switch
     {
         "GET" => HttpMethodType.Get,
@@ -77,6 +103,6 @@ public class ApiKeyUsageLoggerService : BackgroundService
         "PATCH" => HttpMethodType.Patch,
         "HEAD" => HttpMethodType.Head,
         "OPTIONS" => HttpMethodType.Options,
-        _ => HttpMethodType.Get
+        _ => HttpMethodType.None
     };
 }

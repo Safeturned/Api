@@ -13,12 +13,12 @@ namespace Safeturned.Api.Controllers;
 [Authorize]
 public class ScansController : ControllerBase
 {
-    private readonly FilesDbContext _context;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<ScansController> _logger;
 
-    public ScansController(FilesDbContext context, ILogger<ScansController> logger)
+    public ScansController(IServiceScopeFactory serviceScopeFactory, ILogger<ScansController> logger)
     {
-        _context = context;
+        _serviceScopeFactory = serviceScopeFactory;
         _logger = logger;
     }
 
@@ -30,18 +30,23 @@ public class ScansController : ControllerBase
     {
         var userId = GetUserId();
 
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1 || pageSize > 100)
+            pageSize = 20;
 
-        var query = _context.Set<Database.Models.ScanRecord>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var query = db.Set<Database.Models.ScanRecord>()
             .AsNoTracking()
             .Where(s => s.UserId == userId)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(filter))
         {
-            var filterLower = filter.ToLower();
-            query = query.Where(s => s.FileName.ToLower().Contains(filterLower));
+            var filterLower = filter.ToLowerInvariant();
+            query = query.Where(s => s.FileName.ToLowerInvariant().Contains(filterLower));
         }
 
         var totalCount = await query.CountAsync();
@@ -83,7 +88,10 @@ public class ScansController : ControllerBase
     {
         var userId = GetUserId();
 
-        var stats = await _context.Set<Database.Models.ScanRecord>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var stats = await db.Set<Database.Models.ScanRecord>()
             .AsNoTracking()
             .Where(s => s.UserId == userId)
             .GroupBy(s => 1)
@@ -117,9 +125,13 @@ public class ScansController : ControllerBase
     {
         var userId = GetUserId();
 
-        if (limit < 1 || limit > 50) limit = 10;
+        if (limit < 1 || limit > 50)
+            limit = 10;
 
-        var recentScans = await _context.Set<Database.Models.ScanRecord>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var recentScans = await db.Set<Database.Models.ScanRecord>()
             .AsNoTracking()
             .Where(s => s.UserId == userId)
             .OrderByDescending(s => s.ScanDate)

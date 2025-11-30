@@ -1,6 +1,5 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
@@ -8,7 +7,6 @@ using Safeturned.Api.Database.Models;
 using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
-using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Services;
 using Safeturned.FileChecker;
 using Safeturned.FileChecker.Modules;
@@ -45,7 +43,6 @@ public class ChunkedFilesController : ControllerBase
     }
 
     [HttpPost("initiate")]
-    [EnableRateLimiting(KnownRateLimitPolicies.ChunkedUpload)]
     public async Task<IActionResult> InitiateUpload([FromBody] InitiateUploadRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(request.FileName))
@@ -95,7 +92,6 @@ public class ChunkedFilesController : ControllerBase
     }
 
     [HttpPost("chunk")]
-    [EnableRateLimiting(KnownRateLimitPolicies.ChunkedUpload)]
     public async Task<IActionResult> UploadChunk([FromForm] UploadChunkRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(request.SessionId))
@@ -163,7 +159,6 @@ public class ChunkedFilesController : ControllerBase
     }
 
     [HttpPost("complete")]
-    [EnableRateLimiting(KnownRateLimitPolicies.ChunkedUpload)]
     public async Task<IActionResult> CompleteUpload([FromBody] CompleteUploadRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(request.SessionId))
@@ -273,7 +268,7 @@ public class ChunkedFilesController : ControllerBase
 
                     foreach (var badge in badges)
                     {
-                        if (BadgeTokenHelper.VerifyToken(request.BadgeToken, badge.UpdateToken!))
+                        if (BadgeTokenHelper.VerifyToken(request.BadgeToken, badge.UpdateToken!, badge.UpdateSalt))
                         {
                             _logger.Information("Badge {BadgeId} auto-updating via token to hash {Hash}",
                                 badge.Id, fileData.Hash);
@@ -320,7 +315,7 @@ public class ChunkedFilesController : ControllerBase
 
                     foreach (var badge in badges)
                     {
-                        if (BadgeTokenHelper.VerifyToken(request.BadgeToken, badge.UpdateToken!))
+                        if (BadgeTokenHelper.VerifyToken(request.BadgeToken, badge.UpdateToken!, badge.UpdateSalt))
                         {
                             _logger.Information("Badge {BadgeId} auto-updating via token to hash {Hash}",
                                 badge.Id, existingFile.Hash);
@@ -356,7 +351,6 @@ public class ChunkedFilesController : ControllerBase
     }
 
     [HttpGet("status/{sessionId}")]
-    [EnableRateLimiting(KnownRateLimitPolicies.ChunkedUpload)]
     public async Task<IActionResult> GetUploadStatus(string sessionId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(sessionId))
@@ -370,10 +364,18 @@ public class ChunkedFilesController : ControllerBase
                 return NotFound("Upload session not found or expired.");
             }
 
-            var uploadedChunks = session.UploadedChunks.Count(chunk => chunk);
-            var progress = (double)uploadedChunks / session.TotalChunks * 100;
+            var clientIp = Request.HttpContext.GetIPAddress();
+            if (session.ClientIpAddress != clientIp)
+            {
+                _logger.Warning("IP address mismatch for session {SessionId}. Expected: {ExpectedIp}, Actual: {ActualIp}",
+                    sessionId, session.ClientIpAddress, clientIp);
+                return StatusCode(403, "Access denied: IP address mismatch");
+            }
 
-            return Ok(new UploadStatusResponse(sessionId, session.FileName, session.TotalChunks, uploadedChunks, Math.Round(progress, 2), session.IsCompleted, session.ExpiresAt));
+            var uploadedChunks = session.UploadedChunks.Count(chunk => chunk);
+            var progress = (double)uploadedChunks / session.TotalChunks * Constants.RateLimitConstants.PercentageMultiplier;
+
+            return Ok(new UploadStatusResponse(sessionId, session.FileName, session.TotalChunks, uploadedChunks, Math.Round(progress, Constants.RateLimitConstants.DecimalPlacesForRounding), session.IsCompleted, session.ExpiresAt));
         }
         catch (Exception ex)
         {
@@ -383,7 +385,6 @@ public class ChunkedFilesController : ControllerBase
     }
 
     [HttpDelete("cancel/{sessionId}")]
-    [EnableRateLimiting(KnownRateLimitPolicies.ChunkedUpload)]
     public async Task<IActionResult> CancelUpload(string sessionId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(sessionId))
@@ -391,6 +392,20 @@ public class ChunkedFilesController : ControllerBase
 
         try
         {
+            var session = await _chunkStorageService.GetSessionAsync(sessionId, cancellationToken);
+            if (session == null)
+            {
+                return NotFound("Upload session not found or expired.");
+            }
+
+            var clientIp = Request.HttpContext.GetIPAddress();
+            if (session.ClientIpAddress != clientIp)
+            {
+                _logger.Warning("IP address mismatch for cancel request on session {SessionId}. Expected: {ExpectedIp}, Actual: {ActualIp}",
+                    sessionId, session.ClientIpAddress, clientIp);
+                return StatusCode(403, "Access denied: IP address mismatch");
+            }
+
             await _chunkStorageService.CleanupSessionAsync(sessionId, cancellationToken);
             _logger.Information("Cancelled upload session {SessionId}", sessionId);
 

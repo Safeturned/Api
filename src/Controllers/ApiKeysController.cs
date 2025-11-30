@@ -2,6 +2,8 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Safeturned.Api.Constants;
+using Safeturned.Api.Database.Models;
+using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
 using System.Security.Claims;
 
@@ -37,10 +39,8 @@ public class ApiKeysController : ControllerBase
             expiresAt = k.ExpiresAt,
             lastUsedAt = k.LastUsedAt,
             isActive = k.IsActive,
-            scopes = k.Scopes.Split(',', StringSplitOptions.RemoveEmptyEntries),
-            ipWhitelist = k.IpWhitelist,
-            rateLimitTier = k.RateLimitTier,
-            requestsPerHour = k.RequestsPerHour
+            scopes = ApiKeyScopeHelper.ScopesToArray(k.Scopes),
+            ipWhitelist = k.IpWhitelist
         });
 
         return Ok(response);
@@ -70,9 +70,7 @@ public class ApiKeysController : ControllerBase
 
         var userId = GetUserId();
         var prefix = request.Prefix ?? ApiKeyConstants.LivePrefix;
-        var scopes = request.Scopes != null && request.Scopes.Any()
-            ? string.Join(",", request.Scopes)
-            : ApiKeyConstants.DefaultScopes;
+        var scopes = ApiKeyScopeHelper.StringArrayToScopes(request.Scopes);
 
         try
         {
@@ -91,14 +89,12 @@ public class ApiKeysController : ControllerBase
             {
                 id = apiKey.Id,
                 name = apiKey.Name,
-                key = plainTextKey, // ONLY returned on creation!
+                key = plainTextKey,
                 maskedKey = $"{apiKey.Prefix}_...{apiKey.LastSixChars}",
                 createdAt = apiKey.CreatedAt,
                 expiresAt = apiKey.ExpiresAt,
-                scopes = apiKey.Scopes.Split(','),
+                scopes = ApiKeyScopeHelper.ScopesToArray(apiKey.Scopes),
                 ipWhitelist = apiKey.IpWhitelist,
-                rateLimitTier = apiKey.RateLimitTier,
-                requestsPerHour = apiKey.RequestsPerHour,
                 warning = "Save this key securely. It will not be shown again!"
             });
         }

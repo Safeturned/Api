@@ -7,18 +7,18 @@ namespace Safeturned.Api.Services;
 
 public class SteamAuthService : ISteamAuthService
 {
-    private readonly FilesDbContext _context;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger _logger;
     private readonly IConfiguration _config;
     private readonly IHttpClientFactory _httpClientFactory;
 
     public SteamAuthService(
-        FilesDbContext context,
+        IServiceScopeFactory serviceScopeFactory,
         ILogger logger,
         IConfiguration config,
         IHttpClientFactory httpClientFactory)
     {
-        _context = context;
+        _serviceScopeFactory = serviceScopeFactory;
         _logger = logger.ForContext<SteamAuthService>();
         _config = config;
         _httpClientFactory = httpClientFactory;
@@ -26,7 +26,6 @@ public class SteamAuthService : ISteamAuthService
 
     public async Task<User> HandleSteamCallbackAsync(string steamId, string username)
     {
-        // Fetch real Steam profile data
         var (actualUsername, avatarUrl) = await FetchSteamProfileAsync(steamId);
 
         var user = await GetOrCreateUserAsync(steamId, actualUsername ?? username, avatarUrl);
@@ -49,7 +48,7 @@ public class SteamAuthService : ISteamAuthService
             var numericSteamId = steamId;
             if (steamId.Contains("/"))
             {
-                // Extract from URL like "https://steamcommunity.com/openid/id/76561199589103064"
+                // Extract from URL like "https://steamcommunity.com/openid/id/7656..."
                 numericSteamId = steamId.Split('/').Last();
             }
 
@@ -98,8 +97,10 @@ public class SteamAuthService : ISteamAuthService
         // Extract numeric Steam ID if it's a URL
         var numericSteamId = steamId.Contains("/") ? steamId.Split('/').Last() : steamId;
 
-        // Check if this Steam identity already exists
-        var existingIdentity = await _context.Set<UserIdentity>()
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var existingIdentity = await db.Set<UserIdentity>()
             .Include(ui => ui.User)
             .FirstOrDefaultAsync(ui => ui.Provider == AuthProvider.Steam && ui.ProviderUserId == numericSteamId);
 
@@ -110,7 +111,7 @@ public class SteamAuthService : ISteamAuthService
             existingIdentity.AvatarUrl = avatarUrl;
             existingIdentity.LastAuthenticatedAt = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
+            await db.SaveChangesAsync();
             _logger.Information("Updated existing Steam identity for user {UserId}", existingIdentity.UserId);
             return existingIdentity.User;
         }
@@ -125,8 +126,8 @@ public class SteamAuthService : ISteamAuthService
             IsAdmin = false
         };
 
-        _context.Set<User>().Add(newUser);
-        await _context.SaveChangesAsync();
+        db.Set<User>().Add(newUser);
+        await db.SaveChangesAsync();
         _logger.Information("Created new user {UserId} from Steam", newUser.Id);
 
         var steamIdentity = new UserIdentity
@@ -141,8 +142,8 @@ public class SteamAuthService : ISteamAuthService
             LastAuthenticatedAt = DateTime.UtcNow
         };
 
-        _context.Set<UserIdentity>().Add(steamIdentity);
-        await _context.SaveChangesAsync();
+        db.Set<UserIdentity>().Add(steamIdentity);
+        await db.SaveChangesAsync();
 
         _logger.Information("Created Steam identity for user {UserId}", newUser.Id);
         return newUser;
@@ -150,11 +151,14 @@ public class SteamAuthService : ISteamAuthService
 
     public async Task UpdateLastLoginAsync(Guid userId)
     {
-        var user = await _context.Set<User>().FindAsync(userId);
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var user = await db.Set<User>().FindAsync(userId);
         if (user != null)
         {
             user.LastLoginAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
     }
 }

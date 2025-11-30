@@ -12,6 +12,9 @@ public class ApiKeyUsage
     public Guid ApiKeyId { get; set; }
 
     [Required]
+    public Guid UserId { get; set; }
+
+    [Required]
     public int EndpointId { get; set; }
 
     [Required]
@@ -29,10 +32,17 @@ public class ApiKeyUsage
 
     [ForeignKey(nameof(ApiKeyId))]
     public ApiKey ApiKey { get; set; } = null!;
+
+    [ForeignKey(nameof(UserId))]
+    public User User { get; set; } = null!;
+
+    [ForeignKey(nameof(EndpointId))]
+    public Endpoint Endpoint { get; set; } = null!;
 }
 
-public enum HttpMethodType : byte
+public enum HttpMethodType
 {
+    None = 0,
     Get = 1,
     Post = 2,
     Put = 3,
@@ -40,34 +50,4 @@ public enum HttpMethodType : byte
     Patch = 5,
     Head = 6,
     Options = 7
-}
-
-public static class EndpointRegistry
-{
-    private static readonly Dictionary<string, int> EndpointToId = new();
-    private static readonly Dictionary<int, string> IdToEndpoint = new();
-    private static int _nextId = 1;
-    private static readonly Lock Lock = new();
-
-    public static int GetOrCreateEndpointId(string endpoint)
-    {
-        lock (Lock)
-        {
-            if (EndpointToId.TryGetValue(endpoint, out var id))
-                return id;
-
-            id = _nextId++;
-            EndpointToId[endpoint] = id;
-            IdToEndpoint[id] = endpoint;
-            return id;
-        }
-    }
-
-    public static string? GetEndpoint(int id)
-    {
-        lock (Lock)
-        {
-            return IdToEndpoint.TryGetValue(id, out var endpoint) ? endpoint : null;
-        }
-    }
 }

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
+using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
 
 namespace Safeturned.Api.Controllers;
@@ -48,10 +50,10 @@ public class AdminController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var searchLower = search.ToLower();
+            var searchLower = search.ToLowerInvariant();
             query = query.Where(x =>
-                x.Email.ToLower().Contains(searchLower) ||
-                x.Identities.Any(i => i.ProviderUsername != null && i.ProviderUsername.ToLower().Contains(searchLower)));
+                (x.Email != null && x.Email.ToLowerInvariant().Contains(searchLower)) ||
+                x.Identities.Any(i => i.ProviderUsername != null && i.ProviderUsername.ToLowerInvariant().Contains(searchLower)));
         }
 
         if (tier.HasValue)
@@ -76,7 +78,7 @@ public class AdminController : ControllerBase
                 x.Email,
                 Username = x.Username,
                 AvatarUrl = x.AvatarUrl,
-                x.Tier,
+                Tier = (int)x.Tier,
                 x.IsAdmin,
                 x.IsActive,
                 x.CreatedAt,
@@ -87,7 +89,7 @@ public class AdminController : ControllerBase
             .ToListAsync();
 
         _logger.Information("Admin {AdminId} retrieved {Count} users (page {Page})",
-            User.FindFirst("user_id")?.Value, users.Count, page);
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value, users.Count, page);
 
         return Ok(new
         {
@@ -116,7 +118,7 @@ public class AdminController : ControllerBase
         }
 
         _logger.Information("Admin {AdminId} viewed details for user {UserId}",
-            User.FindFirst("user_id")?.Value, userId);
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value, userId);
 
         return Ok(new
         {
@@ -133,7 +135,7 @@ public class AdminController : ControllerBase
                 i.ConnectedAt,
                 i.LastAuthenticatedAt
             }),
-            user.Tier,
+            Tier = (int)user.Tier,
             user.IsAdmin,
             user.IsActive,
             user.CreatedAt,
@@ -172,12 +174,12 @@ public class AdminController : ControllerBase
         await db.SaveChangesAsync();
 
         _logger.Information("Admin {AdminId} updated user {UserId} tier from {OldTier} to {NewTier}",
-            User.FindFirst("user_id")?.Value, userId, oldTier, request.Tier);
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value, userId, oldTier, request.Tier);
 
         return Ok(new
         {
             userId,
-            tier = user.Tier,
+            tier = (int)user.Tier,
             message = $"User tier updated from {oldTier} to {user.Tier}"
         });
     }
@@ -202,7 +204,7 @@ public class AdminController : ControllerBase
         await db.SaveChangesAsync();
 
         _logger.Warning("Admin {AdminId} granted admin status to user {UserId} ({Email})",
-            User.FindFirst("user_id")?.Value, userId, user.Email);
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value, userId, user.Email ?? user.Username ?? userId.ToString());
 
         return Ok(new
         {
@@ -228,7 +230,7 @@ public class AdminController : ControllerBase
             return BadRequest(new { error = "User is not an admin" });
         }
 
-        var currentUserId = User.FindFirst("user_id")?.Value;
+        var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (currentUserId == userId.ToString())
         {
             return BadRequest(new { error = "Cannot revoke your own admin status" });
@@ -238,7 +240,7 @@ public class AdminController : ControllerBase
         await db.SaveChangesAsync();
 
         _logger.Warning("Admin {AdminId} revoked admin status from user {UserId} ({Email})",
-            currentUserId, userId, user.Email);
+            currentUserId, userId, user.Email ?? user.Username ?? userId.ToString());
 
         return Ok(new
         {
@@ -259,7 +261,7 @@ public class AdminController : ControllerBase
 
         var usersByTier = await db.Set<User>()
             .GroupBy(u => u.Tier)
-            .Select(g => new { tier = g.Key, count = g.Count() })
+            .Select(g => new { tier = (int)g.Key, count = g.Count() })
             .ToListAsync();
 
         var totalScans = await db.Set<FileData>().CountAsync();
@@ -299,7 +301,7 @@ public class AdminController : ControllerBase
             })
             .ToListAsync();
 
-        _logger.Information("Admin {AdminId} accessed system analytics", User.FindFirst("user_id")?.Value);
+        _logger.Information("Admin {AdminId} accessed system analytics", User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
         return Ok(new
         {
@@ -340,7 +342,7 @@ public class AdminController : ControllerBase
             return NotFound(new { error = "User not found" });
         }
 
-        var currentUserId = User.FindFirst("user_id")?.Value;
+        var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (currentUserId == userId.ToString() && user.IsActive)
         {
             return BadRequest(new { error = "Cannot deactivate your own account" });
@@ -353,7 +355,7 @@ public class AdminController : ControllerBase
             currentUserId,
             user.IsActive ? "activated" : "deactivated",
             userId,
-            user.Email);
+            user.Email ?? user.Username ?? userId.ToString());
 
         return Ok(new
         {
@@ -383,12 +385,16 @@ public class AdminController : ControllerBase
         try
         {
             var prefix = request.Prefix ?? ApiKeyConstants.LivePrefix;
-            var scopes = request.Scopes != null && request.Scopes.Any()
-                ? string.Join(",", request.Scopes)
-                : ApiKeyConstants.DefaultScopes;
-
+            var scopes = ApiKeyScopeHelper.StringArrayToScopes(request.Scopes);
             var tier = request.Tier ?? TierType.Bot;
-            var requestsPerHour = request.RequestsPerHour ?? (tier == TierType.Bot ? int.MaxValue : 1000);
+
+            // Update user's tier if specified
+            if (request.Tier.HasValue && user.Tier != request.Tier.Value)
+            {
+                user.Tier = request.Tier.Value;
+                await db.SaveChangesAsync();
+                _logger.Information("Admin updated user {UserId} tier to {Tier}", userId, tier);
+            }
 
             var (apiKey, plainTextKey) = await _apiKeyService.GenerateApiKeyWithCustomTierAsync(
                 userId,
@@ -397,12 +403,11 @@ public class AdminController : ControllerBase
                 request.ExpiresAt,
                 scopes,
                 request.IpWhitelist,
-                tier,
-                requestsPerHour
+                tier
             );
 
-            _logger.Information("Admin created API key {ApiKeyId} for user {UserId} with tier {Tier}",
-                apiKey.Id, userId, tier);
+            _logger.Information("Admin created API key {ApiKeyId} for user {UserId}",
+                apiKey.Id, userId);
 
             return Ok(new
             {
@@ -412,16 +417,14 @@ public class AdminController : ControllerBase
                 maskedKey = $"{apiKey.Prefix}_...{apiKey.LastSixChars}",
                 createdAt = apiKey.CreatedAt,
                 expiresAt = apiKey.ExpiresAt,
-                scopes = apiKey.Scopes.Split(','),
+                scopes = ApiKeyScopeHelper.ScopesToArray(apiKey.Scopes),
                 ipWhitelist = apiKey.IpWhitelist,
-                rateLimitTier = apiKey.RateLimitTier,
-                requestsPerHour = apiKey.RequestsPerHour,
                 warning = "Save this key securely. It will not be shown again!"
             });
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error creating bot API key for user {UserId}", userId);
+            _logger.Error(ex, "Error creating API key for user {UserId}", userId);
             return StatusCode(500, new { error = "Failed to create API key", message = ex.Message });
         }
     }
@@ -435,6 +438,5 @@ public record CreateBotApiKeyRequest(
     DateTime? ExpiresAt,
     string[]? Scopes,
     string? IpWhitelist,
-    TierType? Tier,
-    int? RequestsPerHour
+    TierType? Tier
 );

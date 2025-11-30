@@ -8,9 +8,11 @@ using Hangfire.Console;
 using Hangfire.PostgreSql;
 using HangfireBasicAuthenticationFilter;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.Tokens;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
@@ -21,7 +23,6 @@ using Safeturned.Api.Helpers;
 using Safeturned.Api.Jobs;
 using Safeturned.Api.Middleware;
 using Safeturned.Api.Models;
-using Safeturned.Api.RateLimiting;
 using Safeturned.Api.Scripts.Files;
 using Safeturned.Api.Services;
 using Sentry.Hangfire;
@@ -53,21 +54,6 @@ var loggerFactory = new ServiceCollection()
 
 services.Configure<SecuritySettings>(config.GetSection("Security"));
 
-var securitySettings = config.GetSection("Security").Get<SecuritySettings>();
-if (securitySettings?.AllowedOrigins != null && securitySettings.AllowedOrigins.Length > 0)
-{
-    services.AddCors(options =>
-    {
-        options.AddPolicy("RestrictedCors", policy =>
-        {
-            policy.WithOrigins(securitySettings.AllowedOrigins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
-        });
-    });
-}
-
 var dbConnectionString = config.GetRequiredConnectionString("safeturned-db");
 var dbPrepare = new DatabasePreparator(loggerFactory, builder.Environment);
 dbPrepare
@@ -88,40 +74,7 @@ builder.WebHost.UseSentry(x =>
     x.SetBeforeSend((sentryEvent, _) => sentryFilter.Filter(sentryEvent));
 });
 
-services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-    options.AddPolicy(KnownRateLimitPolicies.UploadFile, httpContext =>
-        RateLimitPartition.GetSlidingWindowLimiter(
-            httpContext.GetIPAddress(),
-            _ => new SlidingWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                SegmentsPerWindow = 4
-            }));
-
-    options.AddPolicy(KnownRateLimitPolicies.AnalyticsWithDateRange, httpContext =>
-        RateLimitPartition.GetSlidingWindowLimiter(
-            httpContext.GetIPAddress(),
-            _ => new SlidingWindowRateLimiterOptions
-            {
-                PermitLimit = 30,
-                Window = TimeSpan.FromMinutes(1),
-                SegmentsPerWindow = 4
-            }));
-
-    options.AddPolicy(KnownRateLimitPolicies.ChunkedUpload, httpContext =>
-        RateLimitPartition.GetSlidingWindowLimiter(
-            httpContext.GetIPAddress(),
-            _ => new SlidingWindowRateLimiterOptions
-            {
-                PermitLimit = 50,
-                Window = TimeSpan.FromMinutes(1),
-                SegmentsPerWindow = 4
-            }));
-});
+// Rate limiting is handled by custom ApiKeyRateLimitMiddleware
 
 services.AddOpenApi();
 
@@ -229,19 +182,25 @@ builder.WebHost.ConfigureKestrel(options =>
 services.AddHttpContextAccessor();
 
 var jwtSecret = config.GetRequiredString("Jwt:SecretKey");
-services.AddAuthentication("Bearer")
-    .AddCookie("Cookies", options =>
+services.AddAuthentication(AuthConstants.BearerScheme)
+    .AddCookie(AuthConstants.CookieScheme, options =>
     {
-        options.Cookie.Name = "safeturned_oauth";
+        options.Cookie.Name = AuthConstants.OAuthCookie;
         options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
         options.SlidingExpiration = false;
-        if (builder.Environment.IsDevelopment())
+        options.Cookie.HttpOnly = true;
+        if (builder.Environment.IsProduction())
+        {
+            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        }
+        else
         {
             options.Cookie.SameSite = SameSiteMode.Lax;
             options.Cookie.SecurePolicy = CookieSecurePolicy.None;
         }
     })
-    .AddJwtBearer("Bearer", options =>
+    .AddJwtBearer(AuthConstants.BearerScheme, options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -254,6 +213,38 @@ services.AddAuthentication("Bearer")
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             ClockSkew = TimeSpan.Zero
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                logger.Warning("JWT authentication failed for {Path}: {Error}",
+                    context.Request.Path, context.Exception.Message);
+
+                if (context.Exception is SecurityTokenExpiredException)
+                {
+                    logger.Information("JWT token expired at {ExpiredAt}",
+                        ((SecurityTokenExpiredException)context.Exception).Expires);
+                }
+
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                logger.Debug("JWT token validated successfully for user {UserId} on path {Path}",
+                    userId, context.Request.Path);
+                return Task.CompletedTask;
+            },
+            OnMessageReceived = context =>
+            {
+                var hasAuthHeader = context.Request.Headers.ContainsKey("Authorization");
+                var hasCookie = context.Request.Cookies.ContainsKey(AuthConstants.AccessTokenCookie);
+                logger.Debug("JWT auth check - Path: {Path}, HasAuthHeader: {HasAuth}, HasCookie: {HasCookie}",
+                    context.Request.Path, hasAuthHeader, hasCookie);
+                return Task.CompletedTask;
+            }
+        };
     })
     .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
         ApiKeyAuthenticationOptions.DefaultScheme,
@@ -265,8 +256,8 @@ services.AddAuthentication("Bearer")
         options.CallbackPath = "/signin-discord";
         options.Scope.Add("identify");
         options.Scope.Add("email");
-        options.SaveTokens = true;
-        options.SignInScheme = "Cookies";
+        options.SaveTokens = false;
+        options.SignInScheme = AuthConstants.CookieScheme;
 
         options.ClaimActions.MapCustomJson("urn:discord:avatar:url", user =>
         {
@@ -280,9 +271,15 @@ services.AddAuthentication("Bearer")
             );
         });
 
-        options.Events.OnTicketReceived = context =>
+        options.Events.OnRedirectToAuthorizationEndpoint = context =>
         {
-            context.ReturnUri = config.GetRequiredString("Discord:CallbackPath");
+            if (context.Properties?.Items.TryGetValue("returnUrl", out var returnUrl) == true)
+            {
+                var state = context.Properties.Items.TryGetValue("state", out var existingState)
+                    ? existingState
+                    : Guid.NewGuid().ToString();
+                context.Properties.Items["state"] = $"{state}|{returnUrl}";
+            }
             return Task.CompletedTask;
         };
     })
@@ -290,22 +287,46 @@ services.AddAuthentication("Bearer")
     {
         options.ApplicationKey = config.GetRequiredString("Steam:ApiKey");
         options.CallbackPath = "/signin-steam";
-        options.SaveTokens = true;
-        options.SignInScheme = "Cookies";
-
-        options.Events.OnTicketReceived = context =>
-        {
-            context.ReturnUri = config.GetRequiredString("Steam:CallbackPath");
-            return Task.CompletedTask;
-        };
+        options.SaveTokens = false;
+        options.SignInScheme = AuthConstants.CookieScheme;
     });
+
+var allowedOrigins = config.GetSection("Security:AllowedOrigins").Get<string[]>();
+services.AddCors(options =>
+{
+    if (allowedOrigins != null && allowedOrigins.Length > 0)
+    {
+        options.AddPolicy("RestrictedCors", builder =>
+        {
+            builder
+                .WithOrigins(allowedOrigins)
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        });
+    }
+});
 
 services.AddAuthorizationBuilder()
     .AddPolicy(KnownAuthPolicies.AdminOnly, policy =>
     {
         policy.RequireAuthenticatedUser();
-        policy.RequireClaim("is_admin", "true");
+        policy.RequireClaim(AuthConstants.IsAdminClaim, "true");
     });
+
+services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-CSRF-TOKEN";
+    options.Cookie.Name = "__Secure-Csrf";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+
+    if (!builder.Environment.IsDevelopment())
+    {
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    }
+});
+
 services.AddControllers();
 
 services.Configure<FormOptions>(options =>
@@ -363,16 +384,65 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseAuthentication();
-app.UseExceptionHandler(_ => {}); // it must have empty lambda, otherwise error, more: https://github.com/dotnet/aspnetcore/issues/51888
+app.Use(async (context, next) =>
+{
+    var hasCookie = context.Request.Cookies.TryGetValue(AuthConstants.AccessTokenCookie, out var token);
+    var hasApiKeyHeader = context.Request.Headers.ContainsKey(AuthConstants.ApiKeyHeader);
 
-if (securitySettings?.AllowedOrigins != null && securitySettings.AllowedOrigins.Length > 0)
+    if (hasCookie && !hasApiKeyHeader)
+    {
+        context.Request.Headers.Authorization = new StringValues($"{AuthConstants.BearerScheme} {token}");
+        logger.Debug("Extracted JWT from cookie for path {Path}, token length: {TokenLength}",
+            context.Request.Path, token?.Length ?? 0);
+    }
+    else if (!hasCookie && !hasApiKeyHeader)
+    {
+        logger.Debug("No auth cookie or API key header found for path {Path}", context.Request.Path);
+    }
+
+    await next();
+});
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.Append("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+
+    if (!app.Environment.IsDevelopment())
+    {
+        context.Response.Headers.Append("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+    }
+
+    await next();
+});
+
+if (allowedOrigins != null && allowedOrigins.Length > 0)
 {
     app.UseCors("RestrictedCors");
 }
 
-app.UseRateLimiter();
+app.UseAuthentication();
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Headers.ContainsKey(AuthConstants.ApiKeyHeader))
+    {
+        var result = await context.AuthenticateAsync(AuthConstants.ApiKeyScheme);
+        if (result.Succeeded)
+        {
+            context.User = result.Principal;
+        }
+    }
+    await next();
+});
+
+app.UseExceptionHandler(_ => {});
+
 app.UseApiKeyRateLimit();
+app.UseAntiforgery();
 app.UseAuthorization();
 
 app.UseHangfireDashboard(config.GetRequiredString("Hangfire:DashboardPath"), new DashboardOptions

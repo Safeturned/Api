@@ -31,16 +31,10 @@ public class ApiKey
 
     public DateTime? LastUsedAt { get; set; }
 
-    [Required]
-    public TierType RateLimitTier { get; set; } = TierType.Free;
-
-    public int RequestsPerHour { get; set; } = 60;
-
     public bool IsActive { get; set; } = true;
 
-    // Permission scopes (JSON array stored as string)
-    [MaxLength(500)]
-    public string Scopes { get; set; } = "read,analyze"; // read, analyze, runtime-scan
+    [Required]
+    public ApiKeyScope Scopes { get; set; } = ApiKeyScope.Read | ApiKeyScope.Analyze;
 
     // IP whitelist (comma-separated, null = any IP)
     [MaxLength(1000)]
