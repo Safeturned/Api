@@ -357,29 +357,6 @@ services.Configure<FormOptions>(options =>
 services.AddDbContext<FilesDbContext>(options =>
 {
     options.UseNpgsql(dbConnectionString);
-    options
-        .UseSeeding((context, _) =>
-        {
-            var adminSeedService = new AdminSeedService(context, logger, config);
-            adminSeedService.SeedAdminUser();
-
-            var apiKeySeedService = new ApiKeySeedService(context, logger, builder.Environment, config);
-            apiKeySeedService.SeedWebsiteApiKey();
-        })
-        .UseAsyncSeeding((context, _, _) =>
-        {
-            var adminSeedService = new AdminSeedService(context, logger, config);
-            adminSeedService.SeedAdminUser();
-
-            var apiKeySeedService = new ApiKeySeedService(context, logger, builder.Environment, config);
-            apiKeySeedService.SeedWebsiteApiKey();
-
-            return Task.CompletedTask;
-        });
-    if (builder.Environment.IsDevelopment())
-    {
-        options.ConfigureWarnings(x => x.Ignore(RelationalEventId.PendingModelChangesWarning));
-    }
 });
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -392,6 +369,17 @@ if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
     ApplyMigration<FilesDbContext>(scope);
+}
+
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+    var adminSeedService = new AdminSeedService(context, logger, config);
+    adminSeedService.SeedAdminUser();
+
+    var apiKeySeedService = new ApiKeySeedService(context, logger, builder.Environment, config);
+    apiKeySeedService.SeedWebsiteApiKey();
 }
 
 AppDomain.CurrentDomain.UnhandledException += ExceptionHandling.OnUnhandledException;
