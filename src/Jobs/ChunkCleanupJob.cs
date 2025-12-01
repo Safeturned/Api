@@ -29,12 +29,12 @@ public class ChunkCleanupJob
 
         if (cleanedCount > 0)
         {
-            context.WriteLine("Cleaned up {CleanedCount} expired chunk upload sessions. Active sessions: {ActiveSessions}",
+            context.WriteLine("Cleaned up {0} expired chunk upload sessions. Active sessions: {1}",
                 cleanedCount, activeSessionsAfter);
         }
         else
         {
-            context.WriteLine("No expired chunk upload sessions found. Active sessions: {ActiveSessions}", activeSessionsAfter);
+            context.WriteLine("No expired chunk upload sessions found. Active sessions: {0}", activeSessionsAfter);
         }
     }
 }
