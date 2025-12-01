@@ -5,7 +5,7 @@ namespace Safeturned.Api.Database.Models;
 
 public class FileData
 {
-    [Key] public string Hash { get; set; }
+    [Key] public string Hash { get; set; } = string.Empty;
     public int Score { get; set; }
     public string? FileName { get; set; }
     public long SizeBytes { get; set; }

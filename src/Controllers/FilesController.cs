@@ -187,7 +187,7 @@ public class FilesController : ControllerBase
                 _logger.Information("File {FileName} already exists. Returning existing record without re-analysis.",
                     file.FileName);
 
-                return Ok(new FileCheckResponse(existingFile.FileName, existingFile.Hash,
+                return Ok(new FileCheckResponse(existingFile.FileName ?? file.FileName, existingFile.Hash,
                     existingFile.Score, false, "File already uploaded. Skipped analysis.",
                     DateTime.UtcNow, existingFile.LastScanned,
                     existingFile.SizeBytes));

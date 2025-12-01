@@ -68,13 +68,9 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
             }
             else
             {
-                // Legacy API key validation (from config)
-                if (!ValidateApiKey(context, securitySettings.ApiKey))
-                {
-                    logger.Warning("Invalid or missing legacy API key from {IPAddress}", context.HttpContext.GetIPAddress());
-                    context.Result = new UnauthorizedObjectResult(new { error = "Invalid API key" });
-                    return;
-                }
+                logger.Warning("Invalid or missing API key from {IPAddress}", context.HttpContext.GetIPAddress());
+                context.Result = new UnauthorizedObjectResult(new { error = "Invalid or missing API key" });
+                return;
             }
         }
 
@@ -89,12 +85,6 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
         }
 
         await next();
-    }
-
-    private static bool ValidateApiKey(ActionExecutingContext context, string expectedApiKey)
-    {
-        var apiKey = context.HttpContext.Request.Headers[AuthConstants.ApiKeyHeader].FirstOrDefault();
-        return !string.IsNullOrEmpty(apiKey) && apiKey == expectedApiKey;
     }
 
     private static bool ValidateOrigin(ActionExecutingContext context, string[] allowedOrigins)

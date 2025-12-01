@@ -189,7 +189,7 @@ public class BadgesController : ControllerBase
                 badge.CreatedAt,
                 badge.UpdatedAt,
                 badge.RequireTokenForUpdate,
-                // IMPORTANT: Token is only returned once during creation!
+                // NB! Token is only returned once during creation!
                 UpdateToken = plainToken,
                 LinkedFile = new
                 {

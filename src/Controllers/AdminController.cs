@@ -8,7 +8,6 @@ using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
-using Sentry;
 
 namespace Safeturned.Api.Controllers;
 
@@ -47,7 +46,9 @@ public class AdminController : ControllerBase
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-        var query = filesDb.Set<User>().AsQueryable();
+        var query = filesDb.Set<User>()
+            .Include(u => u.Identities)
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -69,7 +70,6 @@ public class AdminController : ControllerBase
 
         var totalUsers = await query.CountAsync();
         var users = await query
-            .Include(u => u.Identities)
             .OrderByDescending(u => u.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -77,8 +77,12 @@ public class AdminController : ControllerBase
             {
                 x.Id,
                 x.Email,
-                Username = x.Username,
-                AvatarUrl = x.AvatarUrl,
+                Username = x.Identities.Where(i => i.Provider == AuthProvider.Discord).Select(i => i.ProviderUsername).FirstOrDefault()
+                    ?? x.Identities.Where(i => i.Provider == AuthProvider.Steam).Select(i => i.ProviderUsername).FirstOrDefault()
+                    ?? x.Username,
+                AvatarUrl = x.Identities.Where(i => i.Provider == AuthProvider.Discord).Select(i => i.AvatarUrl).FirstOrDefault()
+                    ?? x.Identities.Where(i => i.Provider == AuthProvider.Steam).Select(i => i.AvatarUrl).FirstOrDefault(),
+                AuthProvider = x.Identities.Where(i => i.Provider == AuthProvider.Discord || i.Provider == AuthProvider.Steam).Select(i => (int?)i.Provider).FirstOrDefault() ?? 0,
                 Tier = (int)x.Tier,
                 x.IsAdmin,
                 x.IsActive,
@@ -280,7 +284,10 @@ public class AdminController : ControllerBase
             {
                 u.Id,
                 u.Email,
-                Username = u.Username,
+                Username = u.Identities.Where(i => i.Provider == AuthProvider.Discord).Select(i => i.ProviderUsername).FirstOrDefault()
+                    ?? u.Identities.Where(i => i.Provider == AuthProvider.Steam).Select(i => i.ProviderUsername).FirstOrDefault()
+                    ?? u.Email
+                    ?? u.Username,
                 u.Tier,
                 u.CreatedAt
             })
@@ -293,8 +300,9 @@ public class AdminController : ControllerBase
             .Take(10)
             .Select(f => new
             {
-                hash = f.Hash,
-                f.FileName,
+                id = f.Hash,
+                sha256Hash = f.Hash,
+                fileName = f.FileName,
                 isMalicious = f.Score >= 50,
                 uploadedAt = f.AddDateTime,
                 userId = f.User != null ? f.User.Id : (Guid?)null,

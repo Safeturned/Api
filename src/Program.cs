@@ -301,16 +301,26 @@ services.AddAuthentication(AuthConstants.BearerScheme)
         options.SignInScheme = AuthConstants.CookieScheme;
     });
 
-var allowedOrigins = config.GetSection("Security:AllowedOrigins").Get<string[]>();
+var allowedOrigins = config.GetSection("Security:AllowedOrigins").Get<string[]>() ?? [];
 services.AddCors(options =>
 {
     options.AddPolicy("RestrictedCors", builder =>
     {
-        builder
-            .WithOrigins(allowedOrigins)
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
+        if (allowedOrigins.Length > 0)
+        {
+            builder
+                .WithOrigins(allowedOrigins)
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        }
+        else
+        {
+            builder
+                .AllowAnyOrigin()
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+        }
     });
 });
 
@@ -350,13 +360,20 @@ services.AddDbContext<FilesDbContext>(options =>
     options
         .UseSeeding((context, _) =>
         {
-            var seedService = new AdminSeedService(context, logger, config);
-            seedService.SeedAdminUser();
+            var adminSeedService = new AdminSeedService(context, logger, config);
+            adminSeedService.SeedAdminUser();
+
+            var apiKeySeedService = new ApiKeySeedService(context, logger, builder.Environment, config);
+            apiKeySeedService.SeedWebsiteApiKey();
         })
         .UseAsyncSeeding((context, _, _) =>
         {
-            var seedService = new AdminSeedService(context, logger, config);
-            seedService.SeedAdminUser();
+            var adminSeedService = new AdminSeedService(context, logger, config);
+            adminSeedService.SeedAdminUser();
+
+            var apiKeySeedService = new ApiKeySeedService(context, logger, builder.Environment, config);
+            apiKeySeedService.SeedWebsiteApiKey();
+
             return Task.CompletedTask;
         });
     if (builder.Environment.IsDevelopment())

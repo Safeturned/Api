@@ -22,55 +22,20 @@ This API processes Unturned plugin files (.dll) and scans them for:
 - **API Documentation**: Swagger/OpenAPI
 - **Deployment**: GitHub Actions builds with Aspire, pushes to GHCR, and deploys via SSH, we do not make it via GH Release for simple!
 
-## Quick Start
+## API Documentation
 
-### Prerequisites
+See our complete [API documentation](https://safeturned.com/docs) for:
+- Full endpoint reference
+- Request/response examples
+- Authentication details
+- Rate limiting info
+- Live API playground
 
-- .NET 10.0 SDK
-- Docker Desktop (required for Aspire to run services)
+## For Developers
 
-### Local Development
+Want to contribute or run locally?
 
-1. Clone and setup:
-```bash
-git clone https://github.com/Safeturned/Api.git
-cd Api
-```
-
-2. Install Aspire CLI:
-```bash
-dotnet tool install --global Aspire.Cli
-```
-
-3. Run with Aspire (includes PostgreSQL and pgAdmin):
-```bash
-aspire run
-```
-
-4. Services will be available at:
-   - API: `http://localhost:5000`
-   - pgAdmin: `http://localhost:5050`
-   - Hangfire Dashboard: `http://localhost:5000/hangfire`
-
-### Production Deployment
-
-The API is automatically deployed when you create a version tag:
-
-```bash
-git tag 1.0.0
-git push origin 1.0.0
-```
-
-This triggers:
-1. Build - Aspire publishes the application
-2. Container - Docker image is built and pushed to GitHub Container Registry
-3. Deploy - Files are copied to server and deployed via SSH
-
-## API Endpoints
-
-See our [docs](https://safeturned.com/docs) for API endpoints, and try our Live API Playground.
-
-Now this is also possible to create a custom API Key(s), to access our services outside of the website.
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Complete local setup guide
 
 ## Project Structure
 

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
+using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
 
 namespace Safeturned.Api.Services;
@@ -52,9 +53,9 @@ public class ApiKeyService : IApiKeyService
             }
         }
 
-        var randomPart = GenerateSecureRandomString(ApiKeyConstants.KeyRandomLength);
+        var randomPart = ApiKeyHelper.GenerateSecureRandomString(ApiKeyConstants.KeyRandomLength);
         var plainTextKey = $"{prefix}_{randomPart}";
-        var keyHash = HashApiKey(plainTextKey);
+        var keyHash = ApiKeyHelper.HashApiKey(plainTextKey);
         var lastSixChars = randomPart.Substring(randomPart.Length - ApiKeyConstants.KeyLastCharsLength);
 
         var apiKey = new ApiKey
@@ -92,7 +93,7 @@ public class ApiKeyService : IApiKeyService
 
     public async Task<ApiKey?> ValidateApiKeyAsync(string plainTextKey, string? clientIp = null)
     {
-        var keyHash = HashApiKey(plainTextKey);
+        var keyHash = ApiKeyHelper.HashApiKey(plainTextKey);
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
@@ -285,23 +286,4 @@ public class ApiKeyService : IApiKeyService
         return (activeKeyCount, maxKeys);
     }
 
-    private static string GenerateSecureRandomString(int length)
-    {
-        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        var randomBytes = new byte[length];
-        using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(randomBytes);
-        var result = new char[length];
-        for (var i = 0; i < length; i++)
-        {
-            result[i] = chars[randomBytes[i] % chars.Length];
-        }
-        return new string(result);
-    }
-
-    private static string HashApiKey(string plainTextKey)
-    {
-        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(plainTextKey));
-        return Convert.ToBase64String(hashBytes);
-    }
 }
