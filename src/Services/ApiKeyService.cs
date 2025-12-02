@@ -38,6 +38,15 @@ public class ApiKeyService : IApiKeyService
             throw new InvalidOperationException($"User {userId} not found");
         }
 
+        var isReservedWebsiteKey =
+            name.Equals(ApiKeyConstants.WebsiteServiceName, StringComparison.OrdinalIgnoreCase);
+
+        if (isReservedWebsiteKey && !user.IsAdmin)
+        {
+            _logger.Warning("User {UserId} attempted to create reserved API key name {KeyName}", userId, name);
+            throw new InvalidOperationException("This API key name is reserved.");
+        }
+
         // Check API key limit for user's tier (admins bypass this limit)
         if (!user.IsAdmin)
         {

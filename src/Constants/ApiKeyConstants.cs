@@ -9,6 +9,8 @@ public static class ApiKeyConstants
     public const int KeyLastCharsLength = 6;
 
     public const string DefaultScopes = "read,analyze";
+
+    public const string WebsiteServiceName = "Website Service";
 }
 
 public static class FileConstants

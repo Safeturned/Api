@@ -294,8 +294,6 @@ public class AdminController : ControllerBase
             .ToListAsync();
 
         var recentScans = await db.Set<FileData>()
-            .Include(f => f.User)
-            .ThenInclude(u => u!.Identities)
             .OrderByDescending(f => f.AddDateTime)
             .Take(10)
             .Select(f => new
@@ -305,8 +303,10 @@ public class AdminController : ControllerBase
                 fileName = f.FileName,
                 isMalicious = f.Score >= 50,
                 uploadedAt = f.AddDateTime,
-                userId = f.User != null ? f.User.Id : (Guid?)null,
-                username = f.User != null ? f.User.Username : null
+                userId = f.UserId,
+                username = f.User != null
+                    ? (f.User.Username ?? f.User.Email ?? "Unknown")
+                    : "Anonymous"
             })
             .ToListAsync();
 

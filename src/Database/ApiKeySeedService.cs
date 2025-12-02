@@ -21,7 +21,7 @@ public class ApiKeySeedService
     }
 
     /// <summary>
-    /// Seeds a WebSite API key if one doesn't already exist.
+    /// Seeds a Website API key if one doesn't already exist.
     /// - Development: Uses hardcoded key from configuration (reused across DB resets)
     /// - Production: Generates a new key on first run (sk_live_ prefix)
     /// </summary>
@@ -29,17 +29,19 @@ public class ApiKeySeedService
     {
         try
         {
-            const string keyName = "Website Service";
-            var keyExists = _context.Set<ApiKey>().Any(x => x.Name == keyName);
-            if (keyExists)
-            {
-                _logger.Information("Website API key already exists, skipping seed");
-                return;
-            }
+            const string keyName = ApiKeyConstants.WebsiteServiceName;
             var admin = _context.Set<User>().FirstOrDefault(x => x.IsAdmin);
             if (admin == null)
             {
                 _logger.Warning("No admin user found, cannot seed API key");
+                return;
+            }
+
+            var keyExists = _context.Set<ApiKey>()
+                .Any(x => x.Name == keyName && x.UserId == admin.Id);
+            if (keyExists)
+            {
+                _logger.Information("Website API key already exists, skipping seed");
                 return;
             }
 
