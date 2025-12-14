@@ -454,8 +454,6 @@ app.Use(async (context, next) =>
 app.UseExceptionHandler(_ => {});
 
 app.UseApiKeyRateLimit();
-app.UseAntiforgery();
-app.UseAuthorization();
 
 app.UseHangfireDashboard(config.GetRequiredString("Hangfire:DashboardPath"), new DashboardOptions
 {
@@ -466,8 +464,11 @@ app.UseHangfireDashboard(config.GetRequiredString("Hangfire:DashboardPath"), new
             User = config.GetRequiredString("Hangfire:User"),
             Pass = config.GetRequiredString("Hangfire:Password"),
         }
-    ]
+    ],
+    IgnoreAntiforgeryToken = true
 });
+
+app.UseAuthorization();
 
 app.MapControllers();
 
