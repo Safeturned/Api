@@ -16,7 +16,7 @@ public static class ApiKeyConstants
 public static class FileConstants
 {
     public const string AllowedExtension = ".dll";
-    public static readonly string[] AllowedExtensions = { ".dll" };
+    public static readonly string[] AllowedExtensions = [AllowedExtension];
 
     public const string ErrorMessageInvalidExtension = "Only .DLL files are allowed.";
 }
