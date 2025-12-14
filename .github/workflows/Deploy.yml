@@ -179,22 +179,31 @@ jobs:
         VERSION="$1"
         BRANCH="$2"
         ENVIRONMENT="$3"
+        REGISTRY_USERNAME="$4"
+        REGISTRY_PASSWORD="$5"
+
         if [ -z "$VERSION" ] || [ -z "$BRANCH" ] || [ -z "$ENVIRONMENT" ]; then
-            echo "Usage: $0 <version> <branch> <environment>"
+            echo "Usage: $0 <version> <branch> <environment> [registry_username] [registry_password]"
             exit 1
         fi
         echo "Deploying version: $VERSION, branch: $BRANCH, environment: $ENVIRONMENT"
-        
+
         if grep -q "^SAFETURNED_API_IMAGE=" .env 2>/dev/null; then
             sed -i "s|^SAFETURNED_API_IMAGE=.*|SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}|" .env
         else
             echo "SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}" >> .env
         fi
-        
+
         docker compose down || true
+
+        if [ -n "$REGISTRY_USERNAME" ] && [ -n "$REGISTRY_PASSWORD" ]; then
+            echo "Logging into registry ghcr.io..."
+            echo "$REGISTRY_PASSWORD" | docker login ghcr.io -u "$REGISTRY_USERNAME" --password-stdin
+        fi
+
         docker pull ghcr.io/safeturned/api:v${VERSION} || echo "Image pull failed, will build locally"
         docker compose up -d
-        
+
         echo "Deployment completed successfully!"
         EOF
         
@@ -221,7 +230,7 @@ jobs:
           echo "=== Starting API deployment ==="
           cd /opt/safeturned/deploy
           chmod +x deploy.sh
-          ./deploy.sh "${{ steps.version.outputs.version }}" "${{ steps.branch.outputs.branch }}" "${{ steps.branch.outputs.environment }}"
+          ./deploy.sh "${{ steps.version.outputs.version }}" "${{ steps.branch.outputs.branch }}" "${{ steps.branch.outputs.environment }}" "${{ github.repository_owner }}" "${{ secrets.GITHUB_TOKEN }}"
           echo "=== API deployment completed ==="
 
     #- name: Create Release
