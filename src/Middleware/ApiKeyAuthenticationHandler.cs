@@ -56,7 +56,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             return AuthenticateResult.NoResult();
         }
 
-        if (!apiKey.StartsWith(ApiKeyConstants.LivePrefix) && !apiKey.StartsWith(ApiKeyConstants.TestPrefix))
+        if (!ApiKeyHelper.HasValidPrefix(apiKey))
         {
             return AuthenticateResult.NoResult();
         }

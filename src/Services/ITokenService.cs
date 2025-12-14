@@ -1,4 +1,3 @@
-using Safeturned.Api.Controllers;
 using Safeturned.Api.Database.Models;
 
 namespace Safeturned.Api.Services;

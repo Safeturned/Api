@@ -2,11 +2,9 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Safeturned.Api.Constants;
-using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
 using System.Security.Claims;
-using Sentry;
 
 namespace Safeturned.Api.Controllers;
 

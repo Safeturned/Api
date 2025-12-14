@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Safeturned.Api.Constants;
 
 namespace Safeturned.Api.Helpers;
 
@@ -34,5 +35,52 @@ public static class ApiKeyHelper
     {
         var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(plainTextKey));
         return Convert.ToBase64String(hashBytes);
+    }
+
+    /// <summary>
+    /// Builds a complete API key from prefix and random part.
+    /// Format: {prefix}_{randomPart} (e.g., "sk_live_ABC123...")
+    /// </summary>
+    /// <param name="prefix">Prefix without trailing underscore (e.g., "sk_live")</param>
+    /// <param name="randomPart">Random alphanumeric string</param>
+    /// <returns>Complete API key string</returns>
+    public static string BuildApiKey(string prefix, string randomPart)
+    {
+        return $"{prefix}_{randomPart}";
+    }
+
+    /// <summary>
+    /// Generates a new complete API key with the specified prefix.
+    /// </summary>
+    /// <param name="prefix">Prefix without trailing underscore (e.g., "sk_live")</param>
+    /// <returns>Complete API key string</returns>
+    public static string GenerateApiKey(string prefix)
+    {
+        var randomPart = GenerateSecureRandomString(ApiKeyConstants.KeyRandomLength);
+        return BuildApiKey(prefix, randomPart);
+    }
+
+    /// <summary>
+    /// Extracts the prefix from an API key (e.g., "sk_live" from "sk_live_ABC123").
+    /// </summary>
+    /// <param name="apiKey">Full API key</param>
+    /// <returns>Prefix without trailing underscore</returns>
+    public static string ExtractPrefix(string apiKey)
+    {
+        var parts = apiKey.Split('_');
+        if (parts.Length >= 2)
+        {
+            return $"{parts[0]}_{parts[1]}"; // e.g., "sk_live" from ["sk", "live", "ABC123"]
+        }
+        return parts[0];
+    }
+
+    /// <summary>
+    /// Checks if a key starts with a valid API key prefix format.
+    /// </summary>
+    public static bool HasValidPrefix(string apiKey)
+    {
+        return apiKey.StartsWith($"{ApiKeyConstants.LivePrefix}_") ||
+               apiKey.StartsWith($"{ApiKeyConstants.TestPrefix}_");
     }
 }

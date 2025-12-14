@@ -1,11 +1,7 @@
 using System.Security.Claims;
-using System.Text;
 using System.Text.Json;
 using Asp.Versioning;
-using AspNet.Security.OAuth.Discord;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Constants;
@@ -13,7 +9,6 @@ using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
-using Sentry;
 
 namespace Safeturned.Api.Controllers;
 
@@ -248,7 +243,7 @@ public class AuthController : ControllerBase
                 HttpOnly = true,
                 Secure = isProduction, // HTTPS only in production; HTTP allowed in development
                 SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax, // Cross-site in prod, same-site in dev
-                Expires = DateTimeOffset.UtcNow.AddMinutes(60),
+                Expires = DateTimeOffset.UtcNow.AddDays(30),
                 Path = "/"
             };
 
@@ -257,7 +252,7 @@ public class AuthController : ControllerBase
                 HttpOnly = true,
                 Secure = isProduction, // HTTPS only in production; HTTP allowed in development
                 SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax, // Cross-site in prod, same-site in dev
-                Expires = DateTimeOffset.UtcNow.AddDays(7),
+                Expires = DateTimeOffset.UtcNow.AddDays(30),
                 Path = "/"
             };
 
@@ -363,7 +358,7 @@ public class AuthController : ControllerBase
                 HttpOnly = true,
                 Secure = isProduction, // HTTPS only in production; HTTP allowed in development
                 SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax, // Cross-site in prod, same-site in dev
-                Expires = DateTimeOffset.UtcNow.AddMinutes(60),
+                Expires = DateTimeOffset.UtcNow.AddDays(30),
                 Path = "/"
             };
 
@@ -372,7 +367,7 @@ public class AuthController : ControllerBase
                 HttpOnly = true,
                 Secure = isProduction, // HTTPS only in production; HTTP allowed in development
                 SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax, // Cross-site in prod, same-site in dev
-                Expires = DateTimeOffset.UtcNow.AddDays(7),
+                Expires = DateTimeOffset.UtcNow.AddDays(30),
                 Path = "/"
             };
 

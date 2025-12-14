@@ -5,11 +5,9 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Safeturned.Api.Constants;
-using Safeturned.Api.Controllers;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
-using Sentry;
 
 namespace Safeturned.Api.Services;
 
@@ -31,7 +29,7 @@ public class TokenService : ITokenService
         var jwtSecret = _config.GetRequiredString("Jwt:SecretKey");
         var jwtIssuer = _config.GetRequiredString("Jwt:Issuer");
         var jwtAudience = _config.GetRequiredString("Jwt:Audience");
-        var expirationMinutes = _config.GetValue<int?>("Jwt:ExpirationMinutes") ?? 60;
+        var expirationMinutes = _config.GetValue<int?>("Jwt:ExpirationMinutes") ?? 43200;
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -72,7 +70,7 @@ public class TokenService : ITokenService
             UserId = user.Id,
             Token = GenerateSecureRandomToken(),
             CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(7), // Refresh tokens valid for 7 days
+            ExpiresAt = DateTime.UtcNow.AddDays(30), // Refresh tokens valid for 30 days
             CreatedByIp = ipAddress
         };
 

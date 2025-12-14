@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
-using Sentry;
 
 namespace Safeturned.Api.Controllers;
 

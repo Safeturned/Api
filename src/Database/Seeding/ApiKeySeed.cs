@@ -3,19 +3,19 @@ using Safeturned.Api.Constants;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 
-namespace Safeturned.Api.Database;
+namespace Safeturned.Api.Database.Seeding;
 
-public class ApiKeySeedService
+public class ApiKeySeed
 {
     private readonly DbContext _context;
     private readonly ILogger _logger;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _config;
 
-    public ApiKeySeedService(DbContext context, ILogger logger, IWebHostEnvironment environment, IConfiguration config)
+    public ApiKeySeed(DbContext context, ILogger logger, IWebHostEnvironment environment, IConfiguration config)
     {
         _context = context;
-        _logger = logger.ForContext<ApiKeySeedService>();
+        _logger = logger.ForContext<ApiKeySeed>();
         _environment = environment;
         _config = config;
     }
@@ -37,11 +37,10 @@ public class ApiKeySeedService
                 return;
             }
 
-            var keyExists = _context.Set<ApiKey>()
-                .Any(x => x.Name == keyName && x.UserId == admin.Id);
+            var keyExists = _context.Set<ApiKey>().Any(x => x.Name == keyName && x.UserId == admin.Id && x.IsActive);
             if (keyExists)
             {
-                _logger.Information("Website API key already exists, skipping seed");
+                _logger.Information("Website API key already exists and is active, skipping seed");
                 return;
             }
 
@@ -53,14 +52,13 @@ public class ApiKeySeedService
             }
             else
             {
-                var randomPart = ApiKeyHelper.GenerateSecureRandomString(ApiKeyConstants.KeyRandomLength);
-                plainTextKey = $"{ApiKeyConstants.LivePrefix}_{randomPart}";
+                plainTextKey = ApiKeyHelper.GenerateApiKey(ApiKeyConstants.LivePrefix);
                 _logger.Information("Generated production API key");
             }
 
             var keyHash = ApiKeyHelper.HashApiKey(plainTextKey);
-            var prefix = plainTextKey.Split('_')[0] + "_"; // Extract prefix (sk_test_ or sk_live_)
-            var lastSixChars = plainTextKey[^6..];
+            var prefix = ApiKeyHelper.ExtractPrefix(plainTextKey);
+            var lastSixChars = plainTextKey[^ApiKeyConstants.KeyLastCharsLength..];
 
             var apiKey = new ApiKey
             {

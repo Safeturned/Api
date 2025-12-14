@@ -1,22 +1,19 @@
 using Microsoft.EntityFrameworkCore;
-using Safeturned.Api.Constants;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
-using Safeturned.Api.Services;
-using Sentry;
 
-namespace Safeturned.Api.Database;
+namespace Safeturned.Api.Database.Seeding;
 
-public class AdminSeedService
+public class AdminSeed
 {
     private readonly DbContext _context;
     private readonly ILogger _logger;
     private readonly IConfiguration _config;
 
-    public AdminSeedService(DbContext context, ILogger logger, IConfiguration config)
+    public AdminSeed(DbContext context, ILogger logger, IConfiguration config)
     {
         _context = context;
-        _logger = logger.ForContext<AdminSeedService>();
+        _logger = logger.ForContext<AdminSeed>();
         _config = config;
     }
 

@@ -62,10 +62,9 @@ public class ApiKeyService : IApiKeyService
             }
         }
 
-        var randomPart = ApiKeyHelper.GenerateSecureRandomString(ApiKeyConstants.KeyRandomLength);
-        var plainTextKey = $"{prefix}_{randomPart}";
+        var plainTextKey = ApiKeyHelper.GenerateApiKey(prefix);
         var keyHash = ApiKeyHelper.HashApiKey(plainTextKey);
-        var lastSixChars = randomPart.Substring(randomPart.Length - ApiKeyConstants.KeyLastCharsLength);
+        var lastSixChars = plainTextKey[^ApiKeyConstants.KeyLastCharsLength..];
 
         var apiKey = new ApiKey
         {
@@ -243,7 +242,7 @@ public class ApiKeyService : IApiKeyService
         return (newApiKey, plainTextKey);
     }
 
-    public async Task LogApiKeyUsageAsync(Guid apiKeyId, string endpoint, string method, int statusCode, int responseTimeMs, string? clientIp)
+    public async Task LogApiKeyUsageAsync(Guid apiKeyId, string endpoint, string method, int statusCode, int responseTimeMs, string? clientIp, string? clientTag)
     {
         var logRequest = new ApiKeyUsageLogRequest(
             apiKeyId,
@@ -251,7 +250,8 @@ public class ApiKeyService : IApiKeyService
             method,
             statusCode,
             responseTimeMs,
-            clientIp
+            clientIp,
+            clientTag
         );
 
         if (!_usageLogChannel.Writer.TryWrite(logRequest))

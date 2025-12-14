@@ -21,4 +21,5 @@ public static class AuthConstants
 
     public const string ApiKeyHeader = "X-API-Key";
     public const string AuthorizationHeader = "Authorization";
+    public const string ClientHeader = "X-Client";
 }

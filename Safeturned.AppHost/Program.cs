@@ -2,10 +2,11 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var env = builder.AddDockerComposeEnvironment("env");
 
-var database = builder.AddPostgres("database")
+var postgres = builder.AddPostgres("database")
     .WithPgAdmin()
-    .WithDataVolume()
-    .AddDatabase("safeturned-db");
+    .WithDataVolume();
+
+var database = postgres.AddDatabase("safeturned-db");
 
 var redis = builder.AddRedis("safeturned-redis")
     .WithDataVolume()

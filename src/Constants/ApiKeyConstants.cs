@@ -2,8 +2,8 @@ namespace Safeturned.Api.Constants;
 
 public static class ApiKeyConstants
 {
-    public const string LivePrefix = "sk_live_";
-    public const string TestPrefix = "sk_test_";
+    public const string LivePrefix = "sk_live";
+    public const string TestPrefix = "sk_test";
 
     public const int KeyRandomLength = 32;
     public const int KeyLastCharsLength = 6;
@@ -24,4 +24,13 @@ public static class FileConstants
 public static class KnownAuthPolicies
 {
     public const string AdminOnly = "AdminOnly";
+}
+
+public static class ClientConstants
+{
+    /// <summary>
+    /// Maximum length for client tag/identifier header values.
+    /// Client tags longer than this are truncated for storage/logging.
+    /// </summary>
+    public const int MaxClientTagLength = 50;
 }

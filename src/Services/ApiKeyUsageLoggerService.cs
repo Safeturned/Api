@@ -3,8 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Models;
-using Sentry;
-using HttpMethod = System.Net.Http.HttpMethod;
 
 namespace Safeturned.Api.Services;
 
@@ -72,7 +70,8 @@ public class ApiKeyUsageLoggerService : BackgroundService
             StatusCode = request.StatusCode,
             ResponseTimeMs = request.ResponseTimeMs,
             RequestedAt = DateTime.UtcNow,
-            ClientIpAddress = request.ClientIp
+            ClientIpAddress = request.ClientIp,
+            ClientTag = request.ClientTag
         };
 
         context.Set<ApiKeyUsage>().Add(usage);

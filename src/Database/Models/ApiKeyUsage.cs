@@ -30,6 +30,9 @@ public class ApiKeyUsage
     [MaxLength(50)]
     public string? ClientIpAddress { get; set; }
 
+    [MaxLength(50)]
+    public string? ClientTag { get; set; }
+
     [ForeignKey(nameof(ApiKeyId))]
     public ApiKey ApiKey { get; set; } = null!;
 

@@ -22,6 +22,9 @@ public class FilesDbContext : DbContext
     private DbSet<Models.Endpoint> Endpoints { get; set; }
     private DbSet<RefreshToken> RefreshTokens { get; set; }
     private DbSet<Badge> Badges { get; set; }
+    private DbSet<LoaderRelease> LoaderReleases { get; set; }
+    private DbSet<PluginInstallerRelease> PluginInstallerReleases { get; set; }
+    private DbSet<PluginRelease> PluginReleases { get; set; }
     // ReSharper restore UnusedMember.Local
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -138,5 +141,26 @@ public class FilesDbContext : DbContext
 
         modelBuilder.Entity<ApiKeyUsage>()
             .HasIndex(u => new { u.UserId, u.RequestedAt });
+
+        modelBuilder.Entity<LoaderRelease>()
+            .HasIndex(l => new { l.Framework, l.Configuration, l.Version })
+            .IsUnique();
+
+        modelBuilder.Entity<LoaderRelease>()
+            .HasIndex(l => new { l.Framework, l.Configuration, l.IsLatest });
+
+        modelBuilder.Entity<PluginInstallerRelease>()
+            .HasIndex(p => new { p.Framework, p.Version })
+            .IsUnique();
+
+        modelBuilder.Entity<PluginInstallerRelease>()
+            .HasIndex(p => new { p.Framework, p.IsLatest });
+
+        modelBuilder.Entity<PluginRelease>()
+            .HasIndex(p => new { p.Framework, p.Version })
+            .IsUnique();
+
+        modelBuilder.Entity<PluginRelease>()
+            .HasIndex(p => new { p.Framework, p.IsLatest });
     }
 }

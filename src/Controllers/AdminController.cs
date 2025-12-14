@@ -438,6 +438,82 @@ public class AdminController : ControllerBase
             return StatusCode(500, new { error = "Failed to create API key", message = ex.Message });
         }
     }
+
+    [HttpGet("scans")]
+    public async Task<IActionResult> GetAllScans(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null,
+        [FromQuery] bool? isMalicious = null,
+        [FromQuery] string? sortBy = "date",
+        [FromQuery] string? sortOrder = "desc")
+    {
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1 || pageSize > 100)
+            pageSize = 50;
+
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+
+        var query = db.Set<FileData>()
+            .Include(f => f.User)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            query = query.Where(f =>
+                f.FileName != null && f.FileName.ToLower().Contains(searchLower) ||
+                f.Hash.ToLower().Contains(searchLower));
+        }
+
+        if (isMalicious.HasValue)
+        {
+            query = isMalicious.Value
+                ? query.Where(f => f.Score >= 50)
+                : query.Where(f => f.Score < 50);
+        }
+
+        var totalScans = await query.CountAsync();
+
+        query = (sortBy?.ToLower(), sortOrder?.ToLower()) switch
+        {
+            ("filename", "asc") => query.OrderBy(f => f.FileName),
+            ("filename", "desc") => query.OrderByDescending(f => f.FileName),
+            ("score", "asc") => query.OrderBy(f => f.Score),
+            ("score", "desc") => query.OrderByDescending(f => f.Score),
+            ("date", "asc") => query.OrderBy(f => f.LastScanned),
+            _ => query.OrderByDescending(f => f.LastScanned)
+        };
+
+        var scans = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(f => new
+            {
+                id = f.Hash,
+                fileName = f.FileName,
+                sha256Hash = f.Hash,
+                isMalicious = f.Score >= 50,
+                score = f.Score,
+                uploadedAt = f.LastScanned,
+                userId = f.UserId,
+                username = f.User != null ? (f.User.Username ?? f.User.Email) : null
+            })
+            .ToListAsync();
+
+        var totalPages = (totalScans + pageSize - 1) / pageSize;
+
+        return Ok(new
+        {
+            page,
+            pageSize,
+            totalScans,
+            totalPages,
+            scans
+        });
+    }
 }
 
 public record UpdateTierRequest(TierType Tier);

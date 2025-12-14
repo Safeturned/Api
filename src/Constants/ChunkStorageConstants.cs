@@ -32,4 +32,5 @@ public static class HttpContextItemKeys
     public const string ApiKeyId = "ApiKeyId";
     public const string User = "User";
     public const string ApiKey = "ApiKey";
+    public const string ClientTag = "ClientTag";
 }

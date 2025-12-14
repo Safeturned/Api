@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using System.Threading.Channels;
-using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Hangfire;
 using Hangfire.Console;
@@ -9,14 +8,15 @@ using Hangfire.PostgreSql;
 using HangfireBasicAuthenticationFilter;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.Tokens;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Preparing;
+using Safeturned.Api.Database.Seeding;
 using Safeturned.Api.ExceptionHandlers;
 using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
@@ -85,6 +85,9 @@ services.AddScoped<ITokenService, TokenService>();
 services.AddScoped<IDiscordAuthService, DiscordAuthService>();
 services.AddScoped<ISteamAuthService, SteamAuthService>();
 services.AddScoped<IApiKeyService, ApiKeyService>();
+services.AddScoped<ILoaderReleaseService, LoaderReleaseService>();
+services.AddScoped<IPluginInstallerReleaseService, PluginInstallerReleaseService>();
+services.AddScoped<IPluginReleaseService, PluginReleaseService>();
 
 services.AddSingleton(_ => Channel.CreateUnbounded<ApiKeyUsageLogRequest>(new UnboundedChannelOptions
 {
@@ -216,13 +219,11 @@ services.AddAuthentication(AuthConstants.BearerScheme)
         {
             OnAuthenticationFailed = context =>
             {
-                logger.Warning("JWT authentication failed for {Path}: {Error}",
-                    context.Request.Path, context.Exception.Message);
+                logger.Warning("JWT authentication failed for {Path}: {Error}", context.Request.Path, context.Exception.Message);
 
                 if (context.Exception is SecurityTokenExpiredException)
                 {
-                    logger.Information("JWT token expired at {ExpiredAt}",
-                        ((SecurityTokenExpiredException)context.Exception).Expires);
+                    logger.Information("JWT token expired at {ExpiredAt}", ((SecurityTokenExpiredException)context.Exception).Expires);
                 }
 
                 return Task.CompletedTask;
@@ -230,8 +231,7 @@ services.AddAuthentication(AuthConstants.BearerScheme)
             OnTokenValidated = context =>
             {
                 var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                logger.Debug("JWT token validated successfully for user {UserId} on path {Path}",
-                    userId, context.Request.Path);
+                logger.Debug("JWT token validated successfully for user {UserId} on path {Path}", userId, context.Request.Path);
                 return Task.CompletedTask;
             },
             OnMessageReceived = context =>
@@ -375,10 +375,10 @@ using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
 
-    var adminSeedService = new AdminSeedService(context, logger, config);
+    var adminSeedService = new AdminSeed(context, logger, config);
     adminSeedService.SeedAdminUser();
 
-    var apiKeySeedService = new ApiKeySeedService(context, logger, builder.Environment, config);
+    var apiKeySeedService = new ApiKeySeed(context, logger, builder.Environment, config);
     apiKeySeedService.SeedWebsiteApiKey();
 }
 
@@ -483,6 +483,11 @@ recurringJobManager.AddOrUpdate<ChunkCleanupJob>(
     "chunk-cleanup",
     job => job.CleanupExpiredChunksAsync(null!, CancellationToken.None),
     "0 */6 * * *");
+
+recurringJobManager.AddOrUpdate<RevokeAllApiKeysJob>(
+    "revoke-all-api-keys",
+    job => job.RevokeAllApiKeysAsync(null!, CancellationToken.None),
+    Cron.Never());
 
 app.Run();
 

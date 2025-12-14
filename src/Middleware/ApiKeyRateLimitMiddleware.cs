@@ -6,7 +6,6 @@ using Safeturned.Api.Constants;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Services;
-using Sentry;
 
 namespace Safeturned.Api.Middleware;
 
@@ -108,20 +107,15 @@ public class ApiKeyRateLimitMiddleware
     private static bool ShouldRateLimit(HttpContext context, string path)
     {
         var method = context.Request.Method.ToUpperInvariant();
-        var isApiKeyAuth = context.User.Identity?.IsAuthenticated == true &&
-                          context.User.Identity.AuthenticationType == AuthConstants.ApiKeyScheme;
-
+        var isApiKeyAuth = context.User.Identity?.IsAuthenticated == true && context.User.Identity.AuthenticationType == AuthConstants.ApiKeyScheme;
         if (isApiKeyAuth)
         {
             return true;
         }
-
-        if ((path.StartsWith("/v1.0/files") || path.StartsWith("/v2.0/files")) &&
-            (method == "POST" || method == "PUT"))
+        if ((path.StartsWith("/v1.0/files") || path.StartsWith("/v2.0/files")) && (method == "POST" || method == "PUT"))
         {
             return true;
         }
-
         return false;
     }
 
@@ -130,11 +124,16 @@ public class ApiKeyRateLimitMiddleware
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
         var method = context.Request.Method.ToUpperInvariant();
 
+        if (path.StartsWith("/v1.0/exception") || path.StartsWith("/v2.0/exception"))
+        {
+            return RateLimitTier.Exceptions;
+        }
+
         if (((path.StartsWith("/v1.0/files") || path.StartsWith("/v2.0/files")) ||
              (path.Contains("/upload") && path.Contains("/files"))) &&
             (method == "POST" || method == "PUT"))
         {
-            return RateLimitTier.Expensive;
+            return RateLimitTier.FilesUpload;
         }
 
         if (method == "POST" || method == "PUT" || method == "DELETE" || method == "PATCH")
@@ -259,6 +258,12 @@ public class ApiKeyRateLimitMiddleware
         var remaining = rateLimit - recentRequests.Count;
         var resetTime = recentRequests.Count > 0 ? recentRequests.Min().Add(HourlyWindowDuration) : DateTime.UtcNow.Add(HourlyWindowDuration);
 
+        var clientTag = context.Request.Headers[AuthConstants.ClientHeader].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(clientTag) && clientTag.Length > ClientConstants.MaxClientTagLength)
+        {
+            clientTag = clientTag[..ClientConstants.MaxClientTagLength];
+        }
+
         var startTimestamp = Stopwatch.GetTimestamp();
 
         context.Response.OnStarting(() =>
@@ -288,7 +293,8 @@ public class ApiKeyRateLimitMiddleware
                     context.Request.Method,
                     context.Response.StatusCode,
                     elapsedMs,
-                    clientIp);
+                    clientIp,
+                    clientTag);
             }
         }
     }

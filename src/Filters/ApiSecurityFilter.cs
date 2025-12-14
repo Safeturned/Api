@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Options;
 using Safeturned.Api.Constants;
-using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
 using Safeturned.Api.Services;
@@ -18,6 +17,12 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
         var securitySettings = context.HttpContext.RequestServices.GetRequiredService<IOptions<SecuritySettings>>().Value;
         var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger>().ForContext<ApiSecurityFilter>();
         var apiKeyService = context.HttpContext.RequestServices.GetService<IApiKeyService>();
+        var clientTag = context.HttpContext.Request.Headers[AuthConstants.ClientHeader].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(clientTag) && clientTag.Length > ClientConstants.MaxClientTagLength)
+        {
+            clientTag = clientTag[..ClientConstants.MaxClientTagLength];
+        }
+        context.HttpContext.Items[HttpContextItemKeys.ClientTag] = clientTag;
 
         var startTimestamp = Stopwatch.GetTimestamp();
 
@@ -26,7 +31,7 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
             var apiKeyHeader = context.HttpContext.Request.Headers[AuthConstants.ApiKeyHeader].FirstOrDefault();
             if (!string.IsNullOrEmpty(apiKeyHeader) &&
                 apiKeyService != null &&
-                (apiKeyHeader.StartsWith(ApiKeyConstants.LivePrefix) || apiKeyHeader.StartsWith(ApiKeyConstants.TestPrefix)))
+                ApiKeyHelper.HasValidPrefix(apiKeyHeader))
             {
                 var clientIp = context.HttpContext.GetIPAddress();
                 var apiKey = await apiKeyService.ValidateApiKeyAsync(apiKeyHeader, clientIp);
@@ -60,7 +65,8 @@ public class ApiSecurityFilter : Attribute, IAsyncActionFilter
                     context.HttpContext.Request.Method,
                     executedContext.HttpContext.Response.StatusCode,
                     elapsedMs,
-                    clientIp
+                    clientIp,
+                    clientTag
                 );
                 await apiKeyService.UpdateLastUsedAsync(apiKey.Id);
 

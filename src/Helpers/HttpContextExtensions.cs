@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using Microsoft.Net.Http.Headers;
 using Safeturned.Api.Constants;
-using Safeturned.Api.Database.Models;
 
 namespace Safeturned.Api.Helpers;
 

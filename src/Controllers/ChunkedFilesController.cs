@@ -10,7 +10,6 @@ using Safeturned.Api.Models;
 using Safeturned.Api.Services;
 using Safeturned.FileChecker;
 using Safeturned.FileChecker.Modules;
-using Sentry;
 
 namespace Safeturned.Api.Controllers;
 

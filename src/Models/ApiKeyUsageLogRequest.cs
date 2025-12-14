@@ -6,5 +6,6 @@ public record ApiKeyUsageLogRequest(
     string Method,
     int StatusCode,
     int ResponseTimeMs,
-    string? ClientIp
+    string? ClientIp,
+    string? ClientTag
 );
