@@ -30,10 +30,14 @@ public class ApiKeySeed
         try
         {
             const string keyName = ApiKeyConstants.WebsiteServiceName;
-            var admin = _context.Set<User>().FirstOrDefault(x => x.IsAdmin);
+            var adminDiscordId = _config.GetRequiredString("AdminSeed:DiscordId");
+            var adminIdentity = _context.Set<UserIdentity>()
+                .Include(x => x.User)
+                .FirstOrDefault(x => x.Provider == AuthProvider.Discord && x.ProviderUserId == adminDiscordId);
+            var admin = adminIdentity?.User;
             if (admin == null)
             {
-                _logger.Warning("No admin user found, cannot seed API key");
+                _logger.Warning("No admin user found with Discord ID {DiscordId}, cannot seed API key", adminDiscordId);
                 return;
             }
 

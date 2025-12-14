@@ -25,27 +25,24 @@ public class AdminSeed
     {
         try
         {
-            var adminExists = _context.Set<User>().Any(x => x.IsAdmin);
-            if (adminExists)
-            {
-                _logger.Information("Admin user already exists, skipping seed");
-                return;
-            }
-
             var adminEmail = _config.GetRequiredString("AdminSeed:Email");
             var adminDiscordId = _config.GetRequiredString("AdminSeed:DiscordId");
-
             var existingUserIdentity = _context.Set<UserIdentity>()
                 .Include(x => x.User)
                 .FirstOrDefault(x => x.Provider == AuthProvider.Discord && x.ProviderUserId == adminDiscordId);
-
             if (existingUserIdentity?.User != null)
             {
+                if (existingUserIdentity.User.IsAdmin)
+                {
+                    _logger.Information("Configured admin user {UserId} already exists, skipping seed", existingUserIdentity.User.Id);
+                    return;
+                }
+
                 existingUserIdentity.User.IsAdmin = true;
                 existingUserIdentity.User.Tier = TierType.Premium;
                 _context.SaveChanges();
 
-                _logger.Information("Promoted existing user {UserId} to admin", existingUserIdentity.User.Id);
+                _logger.Warning("Re-promoted user {UserId} to admin (admin status was missing)", existingUserIdentity.User.Id);
                 return;
             }
 
