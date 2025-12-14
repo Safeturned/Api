@@ -8,7 +8,6 @@ using Microsoft.AspNetCore.Mvc;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Jobs;
-using Safeturned.Api.Jobs.Helpers;
 
 namespace Safeturned.Api.Controllers;
 
@@ -29,8 +28,6 @@ public class WebhooksController : ControllerBase
     private readonly IBackgroundJobClient _backgroundJobClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger _logger;
-    private readonly int? _trustedAuthorId;
-    private readonly string _trustedAuthorLogin;
     private readonly string _moduleLoaderSecret;
     private readonly string _moduleLoaderRepoName;
     private readonly string _modulePluginInstallerSecret;
@@ -43,8 +40,6 @@ public class WebhooksController : ControllerBase
         _backgroundJobClient = backgroundJobClient;
         _configuration = configuration;
         _logger = logger.ForContext<WebhooksController>();
-        _trustedAuthorId = _configuration.GetValue<int?>("GitHub:TrustedAuthorId");
-        _trustedAuthorLogin = _configuration.GetRequiredString("GitHub:TrustedAuthorLogin");
         _moduleLoaderSecret = _configuration.GetRequiredString("GitHub:ModuleLoaderWebhookSecret");
         _moduleLoaderRepoName = _configuration.GetRequiredString("GitHub:ModuleLoaderRepoName");
         _modulePluginInstallerSecret = _configuration.GetRequiredString("GitHub:ModulePluginInstallerWebhookSecret");
@@ -238,12 +233,6 @@ public class WebhooksController : ControllerBase
         if (payload?.Action != "published" || payload.Release == null)
         {
             return new GitHubWebhookValidationResult(null);
-        }
-
-        if (payload.Release.Author == null || payload.Release.Author.Id != _trustedAuthorId || !string.Equals(payload.Release.Author.Login, _trustedAuthorLogin, StringComparison.Ordinal))
-        {
-            _logger.Warning("Blocked release from unauthorized author ID: {AuthorId} Login: {AuthorLogin}", payload.Release.Author?.Id, payload.Release.Author?.Login);
-            return new GitHubWebhookValidationResult(null, "Forbidden", StatusCodes.Status403Forbidden);
         }
 
         if (payload.Repository == null || !string.Equals(payload.Repository.Name, expectedRepoName, StringComparison.Ordinal))

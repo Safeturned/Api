@@ -38,8 +38,7 @@ public class ApiKeyService : IApiKeyService
             throw new InvalidOperationException($"User {userId} not found");
         }
 
-        var isReservedWebsiteKey =
-            name.Equals(ApiKeyConstants.WebsiteServiceName, StringComparison.OrdinalIgnoreCase);
+        var isReservedWebsiteKey = name.Equals(ApiKeyConstants.WebsiteServiceName, StringComparison.OrdinalIgnoreCase);
 
         if (isReservedWebsiteKey && !user.IsAdmin)
         {
@@ -50,8 +49,7 @@ public class ApiKeyService : IApiKeyService
         // Check API key limit for user's tier (admins bypass this limit)
         if (!user.IsAdmin)
         {
-            var activeKeyCount = await db.Set<ApiKey>()
-                .CountAsync(k => k.UserId == userId && k.IsActive);
+            var activeKeyCount = await db.Set<ApiKey>().CountAsync(k => k.UserId == userId && k.IsActive);
             var maxKeys = TierConstants.GetMaxApiKeys(user.Tier);
 
             if (activeKeyCount >= maxKeys)
@@ -116,9 +114,7 @@ public class ApiKeyService : IApiKeyService
             return null;
         }
 
-        if (!CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(apiKey.KeyHash),
-            Encoding.UTF8.GetBytes(keyHash)))
+        if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(apiKey.KeyHash), Encoding.UTF8.GetBytes(keyHash)))
         {
             _logger.Warning("API key hash mismatch");
             return null;
