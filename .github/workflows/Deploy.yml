@@ -103,28 +103,63 @@ jobs:
 
     - name: Publish with Aspire
       run: |
-        aspire publish -o ./publish/aspire
-        
-    - name: Build Docker image with dotnet publish
-      run: |
         VERSION="${{ steps.version.outputs.version }}"
-        
-        dotnet publish ./src/Safeturned.Api.csproj \
-          -c Release \
-          -p:PublishProfile=DefaultContainer \
-          -p:ContainerRegistry=ghcr.io \
-          -p:ContainerRepository=safeturned/api \
-          -p:ContainerImageTags="v${VERSION}"
+        ASPIRE_PROJECT=$(find . -name "*.AppHost.csproj" -o -name "*AppHost*.csproj" | head -n 1)
 
-    - name: Tag and push Docker image
+        if [ -z "$ASPIRE_PROJECT" ]; then
+          echo "ERROR: Unable to locate Aspire AppHost project"
+          exit 1
+        fi
+
+        echo "Building container via Aspire prepare-env for AppHost: $ASPIRE_PROJECT"
+        mkdir -p ./publish/aspire
+
+        aspire do prepare-env \
+          --project "$ASPIRE_PROJECT" \
+          -c Release \
+          -o ./publish/aspire
+
+        # Resolve the Aspire-built image from env file and retag
+        ENV_FILE=""
+        if [ -f "publish/aspire/.env.Production" ]; then
+          ENV_FILE="publish/aspire/.env.Production"
+        elif [ -f "publish/aspire/.env" ]; then
+          ENV_FILE="publish/aspire/.env"
+        fi
+
+        APP_IMAGE=""
+        if [ -n "$ENV_FILE" ]; then
+          APP_IMAGE=$(grep -E '^[A-Z0-9_]*APP_IMAGE=' "$ENV_FILE" | head -n1 | cut -d= -f2-)
+          if [ -z "$APP_IMAGE" ]; then
+            APP_IMAGE=$(grep -E '^[A-Z0-9_]*IMAGE=' "$ENV_FILE" | head -n1 | cut -d= -f2-)
+          fi
+        fi
+
+        if [ -z "$APP_IMAGE" ]; then
+          # Fallback: first local image
+          APP_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | head -n1)
+        fi
+
+        if [ -z "$APP_IMAGE" ] || ! docker image inspect "$APP_IMAGE" >/dev/null 2>&1; then
+          echo "ERROR: No local image found from Aspire output"
+          exit 1
+        fi
+
+        echo "Retagging Aspire-built image $APP_IMAGE to ghcr.io/safeturned/api:v${VERSION}"
+        docker tag "$APP_IMAGE" "ghcr.io/safeturned/api:v${VERSION}"
+
+    - name: Push Docker image
       run: |
         VERSION="${{ steps.version.outputs.version }}"
         BRANCH="${{ steps.branch.outputs.branch }}"
-        
-        docker pull "ghcr.io/safeturned/api:v${VERSION}"
+
+        echo "Pushing image ghcr.io/safeturned/api:v${VERSION}..."
+        docker push "ghcr.io/safeturned/api:v${VERSION}"
+
+        echo "Tagging and pushing branch tag..."
         docker tag "ghcr.io/safeturned/api:v${VERSION}" "ghcr.io/safeturned/api:${BRANCH}"
         docker push "ghcr.io/safeturned/api:${BRANCH}"
-        
+
         echo "✅ Images pushed successfully"
 
     - name: Create deployment package
