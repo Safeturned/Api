@@ -1,19 +1,11 @@
 name: Deploy
 
 on:
-  push:
-    tags:
-      - '*.*.*'  # Triggers on version tags like 1.0.0, 2.1.3, etc.
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to deploy (e.g., 1.0.0)'
-        required: true
-        default: '1.0.0'
 
 env:
+  PROJECT_NAME: safeturned
   DOCKER_REGISTRY: ghcr.io
-  IMAGE_NAME: safeturned/api
 
 jobs:
   deploy:
@@ -21,45 +13,35 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
-    steps:
-    - name: Determine version
-      id: version
-      run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          VERSION="${{ github.event.inputs.version }}"
-        else
-          VERSION=${GITHUB_REF#refs/tags/}
-        fi
-        
-        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "❌ Invalid SemVer format: $VERSION"
-          exit 1
-        fi
-        
-        MAJOR=$(echo $VERSION | cut -d. -f1)
-        MINOR=$(echo $VERSION | cut -d. -f2)
-        PATCH=$(echo $VERSION | cut -d. -f3)
-        
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "major=$MAJOR" >> $GITHUB_OUTPUT
-        echo "minor=$MINOR" >> $GITHUB_OUTPUT
-        echo "patch=$PATCH" >> $GITHUB_OUTPUT
-        echo "full_version=$VERSION" >> $GITHUB_OUTPUT
 
-    - name: Determine branch and environment
-      id: branch
+    steps:
+    - name: Set computed variables
+      id: vars
       run: |
-        if [ "${{ github.ref }}" = "refs/heads/master" ] || [ "${{ github.ref }}" = "refs/heads/master" ]; then
-          echo "branch=master" >> $GITHUB_OUTPUT
-          echo "environment=production" >> $GITHUB_OUTPUT
+        VERSION="v${{ github.run_number }}"
+        OWNER="${{ github.repository_owner }}"
+        PROJECT="${{ env.PROJECT_NAME }}"
+        DEPLOY_TAG="${PROJECT}-$(date +%Y%m%d%H%M%S)"
+
+        if [ "${{ github.ref }}" = "refs/heads/master" ]; then
+          BRANCH="master"
+          ENVIRONMENT="production"
         elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
-          echo "branch=dev" >> $GITHUB_OUTPUT
-          echo "environment=development" >> $GITHUB_OUTPUT
+          BRANCH="dev"
+          ENVIRONMENT="development"
         else
-          echo "branch=master" >> $GITHUB_OUTPUT
-          echo "environment=production" >> $GITHUB_OUTPUT
+          BRANCH="master"
+          ENVIRONMENT="production"
         fi
+
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+        echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+        echo "deploy_tag=$DEPLOY_TAG" >> $GITHUB_OUTPUT
+        echo "owner=$OWNER" >> $GITHUB_OUTPUT
+        echo "project=$PROJECT" >> $GITHUB_OUTPUT
+
+        echo "Version: $VERSION | Branch: $BRANCH | Environment: $ENVIRONMENT"
 
     - name: Checkout code with submodules
       uses: actions/checkout@v6
@@ -76,174 +58,169 @@ jobs:
         git submodule status
         echo "=== FileChecker directory contents ==="
         ls -la FileChecker/
-        echo "=== FileChecker/src directory contents ==="
-        ls -la FileChecker/src/
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.x
       env:
         DOTNET_NOLOGO: true
-        DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
         DOTNET_CLI_TELEMETRY_OPTOUT: true
-      with:
-        dotnet-version: 9.*
 
     - name: Setup Docker Buildx
       uses: docker/setup-buildx-action@v3
+      with:
+        driver: docker
 
     - name: Login to GHCR
       uses: docker/login-action@v3
       with:
-        registry: ghcr.io
+        registry: ${{ env.DOCKER_REGISTRY }}
         username: ${{ github.repository_owner }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install Aspire CLI
       run: dotnet tool install --global Aspire.Cli
 
-    - name: Publish with Aspire
+    - name: Build containers with Aspire
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        ASPIRE_PROJECT=$(find . -name "*.AppHost.csproj" -o -name "*AppHost*.csproj" | head -n 1)
+        PROJECT="${{ steps.vars.outputs.project }}"
 
-        if [ -z "$ASPIRE_PROJECT" ]; then
-          echo "ERROR: Unable to locate Aspire AppHost project"
-          exit 1
-        fi
+        aspire do build -c Release
 
-        echo "Building container via Aspire prepare-env for AppHost: $ASPIRE_PROJECT"
-        mkdir -p ./publish/aspire
+        echo "Built images:"
+        docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}' | grep "$PROJECT" || docker images
 
-        aspire do prepare-env \
-          --project "$ASPIRE_PROJECT" \
-          -c Release \
-          -o ./publish/aspire
-
-        # Resolve the Aspire-built image from env file and retag
-        ENV_FILE=""
-        if [ -f "publish/aspire/.env.Production" ]; then
-          ENV_FILE="publish/aspire/.env.Production"
-        elif [ -f "publish/aspire/.env" ]; then
-          ENV_FILE="publish/aspire/.env"
-        fi
-
-        APP_IMAGE=""
-        if [ -n "$ENV_FILE" ]; then
-          APP_IMAGE=$(grep -E '^[A-Z0-9_]*APP_IMAGE=' "$ENV_FILE" | head -n1 | cut -d= -f2-)
-          if [ -z "$APP_IMAGE" ]; then
-            APP_IMAGE=$(grep -E '^[A-Z0-9_]*IMAGE=' "$ENV_FILE" | head -n1 | cut -d= -f2-)
-          fi
-        fi
-
-        if [ -z "$APP_IMAGE" ]; then
-          # Fallback: first local image
-          APP_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | head -n1)
-        fi
-
-        if [ -z "$APP_IMAGE" ] || ! docker image inspect "$APP_IMAGE" >/dev/null 2>&1; then
-          echo "ERROR: No local image found from Aspire output"
-          exit 1
-        fi
-
-        echo "Retagging Aspire-built image $APP_IMAGE to ghcr.io/safeturned/api:v${VERSION}"
-        docker tag "$APP_IMAGE" "ghcr.io/safeturned/api:v${VERSION}"
-
-    - name: Push Docker image
+    - name: Tag and push images
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        BRANCH="${{ steps.branch.outputs.branch }}"
+        PROJECT="${{ steps.vars.outputs.project }}"
+        OWNER="${{ steps.vars.outputs.owner }}"
+        VERSION="${{ steps.vars.outputs.version }}"
+        BRANCH="${{ steps.vars.outputs.branch }}"
+        DEPLOY_TAG="${{ steps.vars.outputs.deploy_tag }}"
+        REGISTRY="${{ env.DOCKER_REGISTRY }}"
 
-        echo "Pushing image ghcr.io/safeturned/api:v${VERSION}..."
-        docker push "ghcr.io/safeturned/api:v${VERSION}"
+        push_image() {
+          local name=$1
+          local source_tag=$2
 
-        echo "Tagging and pushing branch tag..."
-        docker tag "ghcr.io/safeturned/api:v${VERSION}" "ghcr.io/safeturned/api:${BRANCH}"
-        docker push "ghcr.io/safeturned/api:${BRANCH}"
+          local source="${PROJECT}-${name}:${source_tag}"
+          local target_base="${REGISTRY}/${OWNER}/${PROJECT}-${name}"
 
-        echo "✅ Images pushed successfully"
+          echo "Pushing ${name}..."
+          docker tag "$source" "${target_base}:${DEPLOY_TAG}"
+          docker tag "$source" "${target_base}:${VERSION}"
+          docker tag "$source" "${target_base}:${BRANCH}"
+          docker tag "$source" "${target_base}:latest"
 
-    - name: Create deployment package
+          docker push "${target_base}:${DEPLOY_TAG}"
+          docker push "${target_base}:${VERSION}"
+          docker push "${target_base}:${BRANCH}"
+          docker push "${target_base}:latest"
+        }
+
+        push_image "api" "latest"
+        push_image "discordbot" "latest"
+        push_image "migrations" "latest"
+        push_image "web" "latest"
+
+        echo "All images pushed successfully"
+
+    - name: Generate deployment files
       run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        BRANCH="${{ steps.branch.outputs.branch }}"
-        ENVIRONMENT="${{ steps.branch.outputs.environment }}"
-        
-        mkdir -p ./deploy
-        
+        PROJECT="${{ steps.vars.outputs.project }}"
+        ASPIRE_PROJECT=$(find . -name "*.AppHost.csproj" | head -n 1)
+
+        mkdir -p ./publish/aspire ./deploy
+
+        aspire do publish-env --project "$ASPIRE_PROJECT" -c Release -o ./publish/aspire
+
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
-        
-        cat > ./deploy/deploy.sh << 'EOF'
+
+    - name: Create deploy script
+      run: |
+        PROJECT="${{ steps.vars.outputs.project }}"
+
+        cat > ./deploy/deploy.sh << EOF
         #!/bin/bash
         set -e
-        VERSION="$1"
-        BRANCH="$2"
-        ENVIRONMENT="$3"
-        REGISTRY_USERNAME="$4"
-        REGISTRY_PASSWORD="$5"
 
-        if [ -z "$VERSION" ] || [ -z "$BRANCH" ] || [ -z "$ENVIRONMENT" ]; then
-            echo "Usage: $0 <version> <branch> <environment> [registry_username] [registry_password]"
-            exit 1
-        fi
-        echo "Deploying version: $VERSION, branch: $BRANCH, environment: $ENVIRONMENT"
+        PROJECT="$PROJECT"
+        VERSION="\$1"
+        BRANCH="\$2"
+        ENVIRONMENT="\$3"
+        REGISTRY_USER="\$4"
+        REGISTRY_PASS="\$5"
 
-        if grep -q "^SAFETURNED_API_IMAGE=" .env 2>/dev/null; then
-            sed -i "s|^SAFETURNED_API_IMAGE=.*|SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}|" .env
-        else
-            echo "SAFETURNED_API_IMAGE=ghcr.io/safeturned/api:v${VERSION}" >> .env
+        if [ -z "\$VERSION" ] || [ -z "\$BRANCH" ]; then
+          echo "Usage: \$0 <version> <branch> <environment> [registry_user] [registry_pass]"
+          exit 1
         fi
 
-        docker compose down || true
+        echo "Deploying \$PROJECT version \$VERSION (\$ENVIRONMENT)"
 
-        if [ -n "$REGISTRY_USERNAME" ] && [ -n "$REGISTRY_PASSWORD" ]; then
-            echo "Logging into registry ghcr.io..."
-            echo "$REGISTRY_PASSWORD" | docker login ghcr.io -u "$REGISTRY_USERNAME" --password-stdin
+        if [ -n "\$REGISTRY_USER" ] && [ -n "\$REGISTRY_PASS" ]; then
+          echo "\$REGISTRY_PASS" | docker login ghcr.io -u "\$REGISTRY_USER" --password-stdin
         fi
 
-        docker pull ghcr.io/safeturned/api:v${VERSION} || echo "Image pull failed, will build locally"
+        for service in api discordbot migrations web; do
+          VAR_NAME="\$(echo \${PROJECT}_\${service}_IMAGE | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
+          IMAGE="ghcr.io/\${REGISTRY_USER}/\${PROJECT}-\${service}:\${VERSION}"
+
+          if grep -q "^\${VAR_NAME}=" .env 2>/dev/null; then
+            sed -i "s|^\${VAR_NAME}=.*|\${VAR_NAME}=\${IMAGE}|" .env
+          else
+            echo "\${VAR_NAME}=\${IMAGE}" >> .env
+          fi
+
+          echo "Pulling \$service..."
+          docker pull "\$IMAGE" || echo "Warning: Failed to pull \$service"
+        done
+
+        docker compose down 2>/dev/null || true
         docker compose up -d
 
-        echo "Deployment completed successfully!"
+        echo "Deployment complete"
         EOF
-        
+
         chmod +x ./deploy/deploy.sh
 
-    - name: Copy files to server
+    - name: Copy to server
       uses: appleboy/scp-action@v1
       with:
         host: ${{ secrets.SERVER_HOST }}
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml"
-        target: "/opt/safeturned"
+        source: "./deploy/*"
+        target: "/opt/${{ env.PROJECT_NAME }}"
+        strip_components: 1
 
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1
+    - name: Deploy on server
+      uses: appleboy/ssh-action@v1.2.4
       with:
         host: ${{ secrets.SERVER_HOST }}
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          echo "=== Starting API deployment ==="
-          cd /opt/safeturned/deploy
-          chmod +x deploy.sh
-          ./deploy.sh "${{ steps.version.outputs.version }}" "${{ steps.branch.outputs.branch }}" "${{ steps.branch.outputs.environment }}" "${{ github.repository_owner }}" "${{ secrets.GITHUB_TOKEN }}"
-          echo "=== API deployment completed ==="
+          cd /opt/${{ env.PROJECT_NAME }}/deploy
+          ./deploy.sh "${{ steps.vars.outputs.version }}" "${{ steps.vars.outputs.branch }}" "${{ steps.vars.outputs.environment }}" "${{ github.repository_owner }}" "${{ secrets.GITHUB_TOKEN }}"
 
-    #- name: Create Release
-    #  if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
-    #  uses: actions/create-release@v1
-    #  env:
-    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #  with:
-    #    tag_name: v${{ github.run_number }}
-    #    release_name: Release v${{ github.run_number }}
-    #    body: |
-    #      ## Changes
-    #      - Built from commit: ${{ github.sha }}
-    #
-    #    draft: false
-    #    prerelease: false
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: deploy
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package: [safeturned-api, safeturned-discordbot, safeturned-migrations, safeturned-web]
+    steps:
+      - name: Delete old images
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          min-versions-to-keep: 5
+          delete-only-untagged-versions: true

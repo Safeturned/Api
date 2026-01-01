@@ -1,0 +1,63 @@
+version: 2
+updates:
+  # npm packages
+  - package-ecosystem: "npm"
+    directory: "/src"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "sunnamed434"
+      - "Ukine9999"
+    assignees:
+      - "sunnamed434"
+      - "Ukine9999"
+    commit-message:
+      prefix: "npm"
+      include: "scope"
+    # Group minor and patch updates together
+    groups:
+      production-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/src"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "sunnamed434"
+      - "Ukine9999"
+    assignees:
+      - "sunnamed434"
+      - "Ukine9999"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "sunnamed434"
+      - "Ukine9999"
+    assignees:
+      - "sunnamed434"
+      - "Ukine9999"
+    commit-message:
+      prefix: "github-actions"
+      include: "scope"
