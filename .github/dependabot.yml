@@ -18,6 +18,49 @@ updates:
       prefix: "nuget"
       include: "scope"
 
+  # npm packages (web)
+  - package-ecosystem: "npm"
+    directory: "/web/src"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "sunnamed434"
+      - "Ukine9999"
+    assignees:
+      - "sunnamed434"
+      - "Ukine9999"
+    commit-message:
+      prefix: "npm"
+      include: "scope"
+    groups:
+      production-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Docker base images (web)
+  - package-ecosystem: "docker"
+    directory: "/web/src"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "sunnamed434"
+      - "Ukine9999"
+    assignees:
+      - "sunnamed434"
+      - "Ukine9999"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
