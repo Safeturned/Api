@@ -27,6 +27,7 @@ var migrations = builder.AddProject<Projects.Safeturned_MigrationService>("safet
     .WithEnvironment("DOTNET_ENVIRONMENT", environment.EnvironmentName);
 
 var runMode = builder.ExecutionContext.IsRunMode;
+var safeturnedBotApiKey = builder.AddParameter("SafeturnedBotApiKey", secret: true);
 
 IResourceBuilder<IResourceWithEndpoints> web;
 if (runMode)
@@ -58,7 +59,7 @@ builder.AddProject<Projects.Safeturned_DiscordBot>("safeturned-discordbot")
     .WithReference(api)
     .WithEnvironment("DOTNET_ENVIRONMENT", environment.EnvironmentName)
     .WithEnvironment("SafeturnedApiUrl", api.GetEndpoint("http"))
-    .WithEnvironment("SafeturnedBotApiKey", config["Discord:BotApiKey"] ?? "")
+    .WithEnvironment("SafeturnedBotApiKey", safeturnedBotApiKey)
     .WithEnvironment("SafeturnedWebUrl", web.GetEndpoint("http"));
 
 builder.Build().Run();
