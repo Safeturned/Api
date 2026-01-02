@@ -2,6 +2,7 @@ using Discord;
 using Discord.Interactions;
 using Microsoft.Extensions.Configuration;
 using Safeturned.DiscordBot.Services;
+using Serilog;
 
 namespace Safeturned.DiscordBot.Commands;
 
@@ -10,12 +11,14 @@ public class UsageCommand : InteractionModuleBase<SocketInteractionContext>
     private readonly SafeturnedApiClient _apiClient;
     private readonly GuildConfigService _guildConfig;
     private readonly IConfiguration _configuration;
+    private readonly ILogger _logger;
 
-    public UsageCommand(SafeturnedApiClient apiClient, GuildConfigService guildConfig, IConfiguration configuration)
+    public UsageCommand(SafeturnedApiClient apiClient, GuildConfigService guildConfig, IConfiguration configuration, ILogger logger)
     {
         _apiClient = apiClient;
         _guildConfig = guildConfig;
         _configuration = configuration;
+        _logger = logger.ForContext<UsageCommand>();
     }
 
     [SlashCommand("usage", "Check your API usage and rate limits")]
@@ -111,9 +114,10 @@ public class UsageCommand : InteractionModuleBase<SocketInteractionContext>
         }
         catch (Exception ex)
         {
+            _logger.Error(ex, "Failed to check usage in guild {GuildId}", Context.Guild.Id);
             SentrySdk.CaptureException(ex);
             await FollowupAsync(
-                embed: CreateErrorEmbed("Error", $"Failed to check usage: {ex.Message}"),
+                embed: CreateErrorEmbed("Error", "Failed to retrieve usage information. Please try again later."),
                 ephemeral: true);
         }
     }

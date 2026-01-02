@@ -2,6 +2,7 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using Safeturned.DiscordBot.Services;
+using Serilog;
 
 namespace Safeturned.DiscordBot.Commands;
 
@@ -9,15 +10,17 @@ public class PrivateCommand : InteractionModuleBase<SocketInteractionContext>
 {
     private readonly GuildConfigService _guildConfig;
     private readonly ChannelCleanupService _channelCleanup;
+    private readonly ILogger _logger;
     private const int ChannelLifetimeMinutes = 10;
     private static readonly Dictionary<ulong, DateTime> _userCooldowns = new();
     private static readonly object _cooldownLock = new();
     private static readonly TimeSpan CooldownDuration = TimeSpan.FromMinutes(5);
 
-    public PrivateCommand(GuildConfigService guildConfig, ChannelCleanupService channelCleanup)
+    public PrivateCommand(GuildConfigService guildConfig, ChannelCleanupService channelCleanup, ILogger logger)
     {
         _guildConfig = guildConfig;
         _channelCleanup = channelCleanup;
+        _logger = logger.ForContext<PrivateCommand>();
     }
 
     [SlashCommand("private", "Create a temporary private channel for private file analysis")]
@@ -146,9 +149,10 @@ public class PrivateCommand : InteractionModuleBase<SocketInteractionContext>
         }
         catch (Exception ex)
         {
+            _logger.Error(ex, "Failed to create private channel for user {UserId} in guild {GuildId}", Context.User.Id, Context.Guild.Id);
             SentrySdk.CaptureException(ex);
             await FollowupAsync(
-                embed: CreateErrorEmbed("Error", $"Failed to create private channel: {ex.Message}"),
+                embed: CreateErrorEmbed("Error", "Failed to create private channel. Please try again later."),
                 ephemeral: true);
         }
     }

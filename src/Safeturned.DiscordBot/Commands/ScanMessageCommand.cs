@@ -4,6 +4,7 @@ using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 using Safeturned.DiscordBot.Helpers;
 using Safeturned.DiscordBot.Services;
+using Serilog;
 
 namespace Safeturned.DiscordBot.Commands;
 
@@ -13,18 +14,21 @@ public class ScanMessageCommand : InteractionModuleBase<SocketInteractionContext
     private readonly GuildConfigService _guildConfig;
     private readonly HttpClient _httpClient;
     private readonly string _webBaseUrl;
+    private readonly ILogger _logger;
     private static readonly string[] AllowedExtensions = [".dll"];
 
     public ScanMessageCommand(
         SafeturnedApiClient apiClient,
         GuildConfigService guildConfig,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger logger)
     {
         _apiClient = apiClient;
         _guildConfig = guildConfig;
         _httpClient = httpClientFactory.CreateClient();
         _webBaseUrl = configuration.GetRequiredString("SafeturnedWebUrl").TrimEnd('/');
+        _logger = logger.ForContext<ScanMessageCommand>();
     }
 
     [MessageCommand("Scan File")]
@@ -93,8 +97,9 @@ public class ScanMessageCommand : InteractionModuleBase<SocketInteractionContext
                 }
                 catch (Exception ex)
                 {
+                    _logger.Error(ex, "Failed to analyze file {FileName} in guild {GuildId}", attachment.Filename, Context.Guild.Id);
                     SentrySdk.CaptureException(ex);
-                    results.Add((attachment.Filename, null, ex.Message));
+                    results.Add((attachment.Filename, null, "Analysis failed"));
                 }
             }
 
@@ -141,9 +146,10 @@ public class ScanMessageCommand : InteractionModuleBase<SocketInteractionContext
         }
         catch (Exception ex)
         {
+            _logger.Error(ex, "Failed to scan message {MessageId} in guild {GuildId}", message.Id, Context.Guild.Id);
             SentrySdk.CaptureException(ex);
             await FollowupAsync(
-                embed: CreateErrorEmbed("Analysis Failed", $"An unexpected error occurred: {ex.Message}"),
+                embed: CreateErrorEmbed("Analysis Failed", "Something went wrong while scanning. Please try again later."),
                 ephemeral: true);
         }
     }

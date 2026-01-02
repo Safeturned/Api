@@ -1,6 +1,7 @@
 using Discord;
 using Discord.Interactions;
 using Safeturned.DiscordBot.Services;
+using Serilog;
 
 namespace Safeturned.DiscordBot.Commands;
 
@@ -9,11 +10,13 @@ public class SetupCommand : InteractionModuleBase<SocketInteractionContext>
 {
     private readonly SafeturnedApiClient _apiClient;
     private readonly GuildConfigService _guildConfig;
+    private readonly ILogger _logger;
 
-    public SetupCommand(SafeturnedApiClient apiClient, GuildConfigService guildConfig)
+    public SetupCommand(SafeturnedApiClient apiClient, GuildConfigService guildConfig, ILogger logger)
     {
         _apiClient = apiClient;
         _guildConfig = guildConfig;
+        _logger = logger.ForContext<SetupCommand>();
     }
 
     [SlashCommand("setup", "Configure your Safeturned API key for this server")]
@@ -96,9 +99,10 @@ public class SetupCommand : InteractionModuleBase<SocketInteractionContext>
         }
         catch (Exception ex)
         {
+            _logger.Error(ex, "Failed to validate API key in guild {GuildId}", Context.Guild.Id);
             SentrySdk.CaptureException(ex);
             await FollowupAsync(
-                embed: CreateErrorEmbed("Validation Failed", $"Failed to validate API key: {ex.Message}"),
+                embed: CreateErrorEmbed("Validation Failed", "Failed to validate API key. Please try again later."),
                 ephemeral: true);
         }
     }

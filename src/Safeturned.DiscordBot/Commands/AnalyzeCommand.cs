@@ -3,6 +3,7 @@ using Discord.Interactions;
 using Microsoft.Extensions.Configuration;
 using Safeturned.DiscordBot.Helpers;
 using Safeturned.DiscordBot.Services;
+using Serilog;
 
 namespace Safeturned.DiscordBot.Commands;
 
@@ -12,18 +13,21 @@ public class AnalyzeCommand : InteractionModuleBase<SocketInteractionContext>
     private readonly GuildConfigService _guildConfig;
     private readonly HttpClient _httpClient;
     private readonly string _webBaseUrl;
+    private readonly ILogger _logger;
     private static readonly string[] AllowedExtensions = [".dll"];
 
     public AnalyzeCommand(
         SafeturnedApiClient apiClient,
         GuildConfigService guildConfig,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger logger)
     {
         _apiClient = apiClient;
         _guildConfig = guildConfig;
         _httpClient = httpClientFactory.CreateClient();
         _webBaseUrl = configuration.GetRequiredString("SafeturnedWebUrl").TrimEnd('/');
+        _logger = logger.ForContext<AnalyzeCommand>();
     }
 
     [SlashCommand("analyze", "Analyze a .dll plugin file for security threats")]
@@ -105,9 +109,10 @@ public class AnalyzeCommand : InteractionModuleBase<SocketInteractionContext>
         }
         catch (Exception ex)
         {
+            _logger.Error(ex, "Failed to analyze file {FileName} in guild {GuildId}", file.Filename, Context.Guild.Id);
             SentrySdk.CaptureException(ex);
             await FollowupAsync(
-                embed: CreateErrorEmbed("Analysis Failed", $"An unexpected error occurred: {ex.Message}"),
+                embed: CreateErrorEmbed("Analysis Failed", "Something went wrong while analyzing. Please try again later."),
                 ephemeral: true);
         }
     }
