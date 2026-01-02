@@ -199,8 +199,7 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         source: "./deploy/*"
-        target: "/opt/${{ env.PROJECT_NAME }}"
-        strip_components: 1
+        target: "/opt/${{ env.PROJECT_NAME }}/deploy"
 
     - name: Deploy on server
       uses: appleboy/ssh-action@v1.2.4
