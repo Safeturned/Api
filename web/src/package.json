@@ -20,7 +20,7 @@
     "dependencies": {
         "@types/react-syntax-highlighter": "^15.5.13",
         "badge-maker": "^5.0.2",
-        "next": "16.1.1-canary.10",
+        "next": "16.1.1",
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
         "react-syntax-highlighter": "^16.1.0",
