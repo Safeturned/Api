@@ -60,6 +60,6 @@ builder.AddProject<Projects.Safeturned_DiscordBot>("safeturned-discordbot")
     .WithEnvironment("DOTNET_ENVIRONMENT", environment.EnvironmentName)
     .WithEnvironment("SafeturnedApiUrl", api.GetEndpoint("http"))
     .WithEnvironment("SafeturnedBotApiKey", safeturnedBotApiKey)
-    .WithEnvironment("SafeturnedWebUrl", web.GetEndpoint("http"));
+    .WithEnvironment("SafeturnedWebUrl", runMode ? web.GetEndpoint("http").Url : "https://safeturned.com");
 
 builder.Build().Run();
