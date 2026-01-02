@@ -84,6 +84,8 @@ jobs:
       run: dotnet tool install --global Aspire.Cli
 
     - name: Build containers with Aspire
+      env:
+        APP_VERSION: ${{ steps.vars.outputs.version }}
       run: |
         PROJECT="${{ steps.vars.outputs.project }}"
 

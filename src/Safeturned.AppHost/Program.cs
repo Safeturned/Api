@@ -43,6 +43,7 @@ else
 {
     web = builder.AddDockerfile("safeturned-web", "../../web/src")
         .WithHttpEndpoint(port: 3000, targetPort: 3000, env: "PORT")
+        .WithBuildArg("APP_VERSION", Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev")
         .WithEnvironment("API_URL", api.GetEndpoint("http"))
         .WithEnvironment("NEXT_PUBLIC_DISCORD_BOT_CLIENT_ID", "1436734963125981354")
         .WithReference(api)
