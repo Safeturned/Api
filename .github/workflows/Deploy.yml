@@ -20,6 +20,7 @@ jobs:
       run: |
         VERSION="v${{ github.run_number }}"
         OWNER="${{ github.repository_owner }}"
+        OWNER="${OWNER,,}"  # Docker requires lowercase
         PROJECT="${{ env.PROJECT_NAME }}"
         DEPLOY_TAG="${PROJECT}-$(date +%Y%m%d%H%M%S)"
 
@@ -206,7 +207,7 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           cd /opt/${{ env.PROJECT_NAME }}/deploy
-          ./deploy.sh "${{ steps.vars.outputs.version }}" "${{ steps.vars.outputs.branch }}" "${{ steps.vars.outputs.environment }}" "${{ github.repository_owner }}" "${{ secrets.GITHUB_TOKEN }}"
+          ./deploy.sh "${{ steps.vars.outputs.version }}" "${{ steps.vars.outputs.branch }}" "${{ steps.vars.outputs.environment }}" "${{ steps.vars.outputs.owner }}" "${{ secrets.GITHUB_TOKEN }}"
 
   cleanup:
     runs-on: ubuntu-latest
