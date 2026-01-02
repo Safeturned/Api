@@ -466,14 +466,8 @@ public class AuthController : ControllerBase
         }
 
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
-        var tierClaim = User.FindFirst(AuthConstants.TierClaim)?.Value;
+        var tier = (int)User.GetTier();
         var isAdmin = User.FindFirst(AuthConstants.IsAdminClaim)?.Value;
-
-        int tier = 0;
-        if (!string.IsNullOrEmpty(tierClaim) && int.TryParse(tierClaim, out var parsedTier))
-        {
-            tier = parsedTier;
-        }
 
         var identities = await GetUserIdentitiesAsync(userId);
 

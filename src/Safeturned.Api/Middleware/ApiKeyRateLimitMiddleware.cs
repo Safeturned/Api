@@ -149,8 +149,6 @@ public class ApiKeyRateLimitMiddleware
         var apiKeyId = context.User.FindFirst(AuthConstants.ApiKeyIdClaim)?.Value;
         var userId = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                       ?? context.User.FindFirst(AuthConstants.SubClaim)?.Value;
-        var tierStr = context.User.FindFirst(AuthConstants.TierClaim)?.Value;
-
         if (string.IsNullOrEmpty(apiKeyId) || string.IsNullOrEmpty(userId))
         {
             _logger.Warning("API key authentication missing required claims, falling back to guest rate limit");
@@ -158,7 +156,7 @@ public class ApiKeyRateLimitMiddleware
             return;
         }
 
-        var tier = int.TryParse(tierStr, out var tierInt) ? (TierType)tierInt : TierType.Free;
+        var tier = context.User.GetTier();
         var isAdmin = context.User.FindFirst(AuthConstants.IsAdminClaim)?.Value == "true";
         var rateLimit = isAdmin ? TierConstants.RateLimitAdmin : TierConstants.GetOperationRateLimit(tier, operationTier);
 
@@ -309,8 +307,7 @@ public class ApiKeyRateLimitMiddleware
             return;
         }
 
-        var tierStr = context.User.FindFirst(AuthConstants.TierClaim)?.Value;
-        var tier = int.TryParse(tierStr, out var tierInt) ? (TierType)tierInt : TierType.Free;
+        var tier = context.User.GetTier();
         var isAdmin = context.User.FindFirst(AuthConstants.IsAdminClaim)?.Value == "true";
         var rateLimit = isAdmin ? TierConstants.RateLimitAdmin : TierConstants.GetOperationRateLimit(tier, operationTier);
 

@@ -25,7 +25,7 @@ public class SafeturnedApiClient
         using var streamContent = new StreamContent(fileStream);
         content.Add(streamContent, "file", fileName);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{ApiVersion}/files/analyze");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{ApiVersion}/files");
         request.Content = content;
 
         if (!string.IsNullOrEmpty(apiKey))
@@ -84,38 +84,28 @@ public class SafeturnedApiClient
 
 public class AnalysisResult
 {
-    [JsonPropertyName("hash")]
+    [JsonPropertyName("fileHash")]
     public string Hash { get; set; } = string.Empty;
 
     [JsonPropertyName("score")]
-    public int Score { get; set; }
+    public float Score { get; set; }
 
     [JsonPropertyName("fileName")]
     public string FileName { get; set; } = string.Empty;
 
-    [JsonPropertyName("sizeBytes")]
+    [JsonPropertyName("fileSizeBytes")]
     public long SizeBytes { get; set; }
 
-    [JsonPropertyName("detectedType")]
-    public string DetectedType { get; set; } = string.Empty;
+    [JsonPropertyName("checked")]
+    public bool Checked { get; set; }
 
     [JsonPropertyName("lastScanned")]
     public DateTime LastScanned { get; set; }
 
-    [JsonPropertyName("detections")]
-    public List<Detection>? Detections { get; set; }
-}
+    [JsonPropertyName("checkedItems")]
+    public string[]? Detections { get; set; }
 
-public class Detection
-{
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
-
-    [JsonPropertyName("severity")]
-    public string Severity { get; set; } = string.Empty;
-
-    [JsonPropertyName("description")]
-    public string Description { get; set; } = string.Empty;
+    public string DetectedType => Checked ? "Assembly" : "Unknown";
 }
 
 public class UsageInfo

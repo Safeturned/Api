@@ -862,54 +862,56 @@ export default function BadgesPage() {
                                                     </div>
                                                 </div>
 
-                                                <div className='mt-4 bg-slate-900/50 rounded-lg p-4 border border-slate-700'>
-                                                    <div className='flex items-center justify-between flex-wrap gap-4'>
-                                                        <div className='flex-1 min-w-[200px]'>
-                                                            <p className='text-sm text-slate-400 mb-2 font-medium'>
-                                                                {t('badges.currentlyShowing')}
-                                                            </p>
-                                                            <p className='text-white font-semibold text-lg mb-1'>
-                                                                {badge.linkedFile.fileName}
-                                                            </p>
-                                                            <p className='text-sm text-slate-400 flex items-center gap-1.5'>
-                                                                <svg
-                                                                    className='w-4 h-4'
-                                                                    fill='none'
-                                                                    stroke='currentColor'
-                                                                    viewBox='0 0 24 24'
+                                                {badge.linkedFile && (
+                                                    <div className='mt-4 bg-slate-900/50 rounded-lg p-4 border border-slate-700'>
+                                                        <div className='flex items-center justify-between flex-wrap gap-4'>
+                                                            <div className='flex-1 min-w-[200px]'>
+                                                                <p className='text-sm text-slate-400 mb-2 font-medium'>
+                                                                    {t('badges.currentlyShowing')}
+                                                                </p>
+                                                                <p className='text-white font-semibold text-lg mb-1'>
+                                                                    {badge.linkedFile.fileName}
+                                                                </p>
+                                                                <p className='text-sm text-slate-400 flex items-center gap-1.5'>
+                                                                    <svg
+                                                                        className='w-4 h-4'
+                                                                        fill='none'
+                                                                        stroke='currentColor'
+                                                                        viewBox='0 0 24 24'
+                                                                    >
+                                                                        <path
+                                                                            strokeLinecap='round'
+                                                                            strokeLinejoin='round'
+                                                                            strokeWidth={2}
+                                                                            d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'
+                                                                        />
+                                                                    </svg>
+                                                                    {formatDateTime(
+                                                                        badge.linkedFile.lastScanned,
+                                                                        locale
+                                                                    )}
+                                                                </p>
+                                                            </div>
+                                                            <div className='text-right'>
+                                                                <p className='text-sm text-slate-400 mb-2 font-medium'>
+                                                                    {t('badges.riskScore')}
+                                                                </p>
+                                                                <p
+                                                                    className={`text-3xl font-bold ${getRiskColor(badge.linkedFile.score)} mb-1`}
                                                                 >
-                                                                    <path
-                                                                        strokeLinecap='round'
-                                                                        strokeLinejoin='round'
-                                                                        strokeWidth={2}
-                                                                        d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'
-                                                                    />
-                                                                </svg>
-                                                                {formatDateTime(
-                                                                    badge.linkedFile.lastScanned,
-                                                                    locale
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                        <div className='text-right'>
-                                                            <p className='text-sm text-slate-400 mb-2 font-medium'>
-                                                                {t('badges.riskScore')}
-                                                            </p>
-                                                            <p
-                                                                className={`text-3xl font-bold ${getRiskColor(badge.linkedFile.score)} mb-1`}
-                                                            >
-                                                                {badge.linkedFile.score}/100
-                                                            </p>
-                                                            <p
-                                                                className={`text-sm font-medium ${getRiskColor(badge.linkedFile.score)}`}
-                                                            >
-                                                                {getRiskLabel(
-                                                                    badge.linkedFile.score
-                                                                )}
-                                                            </p>
+                                                                    {badge.linkedFile.score}/100
+                                                                </p>
+                                                                <p
+                                                                    className={`text-sm font-medium ${getRiskColor(badge.linkedFile.score)}`}
+                                                                >
+                                                                    {getRiskLabel(
+                                                                        badge.linkedFile.score
+                                                                    )}
+                                                                </p>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
+                                                )}
 
                                                 <div className='mt-4 bg-slate-900/50 rounded-lg p-5 border border-slate-700'>
                                                     <p className='text-sm text-slate-400 mb-3 font-medium'>

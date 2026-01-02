@@ -21,7 +21,6 @@ public class Worker(
             await using var scope = serviceProvider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<BotDbContext>();
             await dbContext.Database.MigrateAsync(stoppingToken);
-
             logger.LogInformation("Database migration completed successfully");
         }
         catch (Exception ex)

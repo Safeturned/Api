@@ -174,10 +174,8 @@ if (sessionExpirationHours <= 0)
 if (maxConcurrentSessionsPerIp <= 0)
     throw new InvalidOperationException("UploadLimits:MaxConcurrentSessionsPerIp must be configured and greater than 0");
 
-var port = Environment.GetEnvironmentVariable("SAFETURNED_API_PORT") ?? throw new InvalidOperationException("API port is not set.");
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenAnyIP(int.Parse(port));
     options.Limits.MaxRequestBodySize = maxChunkSizeBytes;
 });
 

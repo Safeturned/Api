@@ -270,7 +270,9 @@
         "tryAgain": "Try Again",
         "noScansYet": "No scans yet",
         "uploadFirstFile": "Upload your first file to get started",
-        "upgradePremium": "Upgrade to Premium for higher rate limits, larger file uploads, and priority support!"
+        "upgradePremium": "Upgrade to Premium for higher rate limits, larger file uploads, and priority support!",
+        "discordBot": "Discord Bot",
+        "discordBotDesc": "Scan files in Discord"
     },
     "scans": {
         "title": "Scan History",
@@ -1160,5 +1162,104 @@
     },
     "achievements": {
         "unlocked": "Achievement Unlocked!"
+    },
+    "discord": {
+        "hero": {
+            "badge": "Discord Integration",
+            "title": "Safeturned Bot",
+            "subtitle": "Scan plugins for malware directly in your Discord server. Instant analysis, private channels, and seamless protection.",
+            "addToDiscord": "Add to Discord",
+            "joinCommunity": "Join our Community"
+        },
+        "features": {
+            "title": "What the Bot Can Do",
+            "scanning": {
+                "title": "Instant File Scanning",
+                "description": "Upload .dll files directly in Discord and get instant malware analysis with detailed threat reports"
+            },
+            "private": {
+                "title": "Private Analysis Channels",
+                "description": "Create temporary private channels for confidential scans. Channels auto-delete after 24 hours"
+            },
+            "protection": {
+                "title": "Server-Wide Protection",
+                "description": "Configure API access once and your whole team can scan files. Track usage with built-in analytics"
+            }
+        },
+        "commands": {
+            "title": "Available Commands",
+            "adminBadge": "Admin Only",
+            "everyoneBadge": "Everyone",
+            "analyze": {
+                "description": "Upload and scan a .dll file for malware. Attach a file and run this command to get instant analysis results."
+            },
+            "private": {
+                "description": "Create a temporary private channel for confidential analysis. The channel auto-deletes after 24 hours."
+            },
+            "setup": {
+                "description": "Configure the Safeturned API key for your server. Required before using other commands."
+            },
+            "help": {
+                "description": "Display the bot usage guide and list of all available commands."
+            },
+            "usage": {
+                "description": "View your current rate limits, API usage statistics, and remaining requests."
+            }
+        },
+        "setup": {
+            "title": "Get Started in 3 Steps",
+            "step1": {
+                "title": "Add the Bot",
+                "description": "Click \"Add to Discord\" and select the server where you want to use Safeturned"
+            },
+            "step2": {
+                "title": "Configure Your Server",
+                "description": "Run /setup with your API key. Don't have one? Create it from your dashboard"
+            },
+            "step3": {
+                "title": "Start Scanning",
+                "description": "Use /analyze with any .dll file to check it for malware. Results appear instantly"
+            },
+            "needApiKey": "Need an API key?",
+            "createApiKey": "Create API Key"
+        },
+        "permissions": {
+            "title": "Required Permissions",
+            "description": "The bot needs these permissions to work properly. Here's what each one does:",
+            "manageChannels": "Manage Channels",
+            "manageChannelsReason": "Create and delete private analysis channels",
+            "viewChannels": "View Channels",
+            "viewChannelsReason": "See channels where bot commands are used",
+            "sendMessages": "Send Messages",
+            "sendMessagesReason": "Send scan results and responses",
+            "embedLinks": "Embed Links",
+            "embedLinksReason": "Display rich formatted scan results with colors and formatting",
+            "readHistory": "Read Message History",
+            "readHistoryReason": "Access files attached to messages for scanning"
+        },
+        "cta": {
+            "title": "Ready to protect your server?",
+            "subtitle": "Add Safeturned Bot and start scanning plugins today",
+            "docsLink": "Read the documentation"
+        }
+    },
+    "integrations": {
+        "title": "Integrate Anywhere",
+        "subtitle": "Use Safeturned wherever you work",
+        "discord": {
+            "title": "Discord Bot",
+            "description": "Scan plugins directly in your Discord server. Share results with your team instantly.",
+            "cta": "Learn More"
+        },
+        "loader": {
+            "title": "Server Integration",
+            "description": "Auto-scan plugins on your Unturned server. Get alerts when threats are detected.",
+            "cta": "Download Loader"
+        },
+        "api": {
+            "title": "REST API",
+            "description": "Build custom integrations with our developer-friendly API. Full documentation included.",
+            "cta": "View Docs"
+        }
     }
 }

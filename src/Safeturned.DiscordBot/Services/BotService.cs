@@ -32,9 +32,8 @@ public class BotService : IHostedService
         _client.Log += LogAsync;
         _client.Ready += ReadyAsync;
 
-        var token = _configuration.GetRequiredString("DiscordBotToken");
         await _interactionHandler.InitializeAsync();
-        await _client.LoginAsync(TokenType.Bot, token);
+        await _client.LoginAsync(TokenType.Bot, _configuration.GetRequiredString("DiscordBotToken"));
         await _client.StartAsync();
     }
 

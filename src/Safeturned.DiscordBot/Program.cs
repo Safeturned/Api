@@ -14,10 +14,15 @@ var logger = Log.Logger = new LoggerConfiguration()
     .CreateBootstrapLogger();
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.AddServiceDefaults();
-
 var config = builder.Configuration;
 var services = builder.Services;
+
+if (builder.Environment.IsDevelopment())
+{
+    config.AddUserSecrets<Program>();
+}
+
+builder.AddServiceDefaults();
 
 services.AddSerilog((sp, lc) => lc
     .ReadFrom.Configuration(config)

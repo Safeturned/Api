@@ -4,15 +4,17 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Folder Name="/aspire/">
+    <Project Path="src/Safeturned.AppHost/Safeturned.AppHost.csproj" />
+    <Project Path="src/Safeturned.MigrationService/Safeturned.MigrationService.csproj" />
+    <Project Path="src/Safeturned.ServiceDefaults/Safeturned.ServiceDefaults.csproj" />
+  </Folder>
   <Folder Name="/FileChecker/" />
   <Folder Name="/FileChecker/src/">
     <Project Path="FileChecker/src/Safeturned.FileChecker/Safeturned.FileChecker.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Safeturned.Api/Safeturned.Api.csproj" />
-    <Project Path="src/Safeturned.AppHost/Safeturned.AppHost.csproj" />
     <Project Path="src/Safeturned.DiscordBot/Safeturned.DiscordBot.csproj" />
-    <Project Path="src/Safeturned.MigrationService/Safeturned.MigrationService.csproj" />
-    <Project Path="src/Safeturned.ServiceDefaults/Safeturned.ServiceDefaults.csproj" />
   </Folder>
 </Solution>

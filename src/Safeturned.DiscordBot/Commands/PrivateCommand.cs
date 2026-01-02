@@ -38,18 +38,18 @@ public class PrivateCommand : InteractionModuleBase<SocketInteractionContext>
                 return;
             }
 
-            // Check cooldown to prevent spam
             lock (_cooldownLock)
             {
                 if (_userCooldowns.TryGetValue(user.Id, out var lastUsed))
                 {
-                    var remaining = CooldownDuration - (DateTime.UtcNow - lastUsed);
-                    if (remaining > TimeSpan.Zero)
+                    var cooldownEnds = lastUsed.Add(CooldownDuration);
+                    if (cooldownEnds > DateTime.UtcNow)
                     {
+                        var cooldownTimestamp = new DateTimeOffset(cooldownEnds).ToUnixTimeSeconds();
                         FollowupAsync(
                             embed: CreateErrorEmbed(
                                 "Cooldown Active",
-                                $"Please wait **{remaining.Minutes}m {remaining.Seconds}s** before creating another private channel."),
+                                $"You can create another private channel <t:{cooldownTimestamp}:R>."),
                             ephemeral: true).Wait();
                         return;
                     }
@@ -57,7 +57,6 @@ public class PrivateCommand : InteractionModuleBase<SocketInteractionContext>
                 _userCooldowns[user.Id] = DateTime.UtcNow;
             }
 
-            // Check if API key is configured (unless official guild)
             if (!_guildConfig.IsOfficialGuild(guild.Id))
             {
                 var apiKey = await _guildConfig.GetApiKeyAsync(guild.Id);
@@ -106,6 +105,13 @@ public class PrivateCommand : InteractionModuleBase<SocketInteractionContext>
                 props.Topic = $"Private analysis channel for {user.Username}. Auto-deletes in {ChannelLifetimeMinutes} minutes.";
             });
 
+            // Schedule channel deletion (persisted to database)
+            var deleteAt = DateTime.UtcNow.AddMinutes(ChannelLifetimeMinutes);
+            await _channelCleanup.ScheduleDeletionAsync(guild.Id, channel.Id, user.Id, deleteAt);
+
+            // Discord timestamp format: <t:UNIX_TIMESTAMP:R> shows relative time with live countdown
+            var deleteTimestamp = new DateTimeOffset(deleteAt).ToUnixTimeSeconds();
+
             // Send welcome message in the private channel
             var welcomeEmbed = new EmbedBuilder()
                 .WithTitle("🔒 Private Analysis Channel")
@@ -114,23 +120,19 @@ public class PrivateCommand : InteractionModuleBase<SocketInteractionContext>
                     $"**How to use:**\n" +
                     $"• Upload a `.dll` file and use `/analyze` to scan it\n" +
                     $"• Only you and the bot can see this channel\n\n" +
-                    $"⏰ **This channel will be automatically deleted in {ChannelLifetimeMinutes} minutes.**")
+                    $"⏰ **This channel will be automatically deleted <t:{deleteTimestamp}:R>.**")
                 .WithColor(new Color(139, 92, 246))
                 .WithFooter("Safeturned Plugin Security Scanner")
                 .Build();
 
             await channel.SendMessageAsync(embed: welcomeEmbed);
 
-            // Schedule channel deletion (persisted to database)
-            var deleteAt = DateTime.UtcNow.AddMinutes(ChannelLifetimeMinutes);
-            await _channelCleanup.ScheduleDeletionAsync(guild.Id, channel.Id, user.Id, deleteAt);
-
             // Respond to the user
             await FollowupAsync(
                 embed: CreateSuccessEmbed(
                     "Private Channel Created",
                     $"Your private channel has been created: {channel.Mention}\n\n" +
-                    $"⏰ The channel will be automatically deleted in **{ChannelLifetimeMinutes} minutes**."),
+                    $"⏰ The channel will be automatically deleted <t:{deleteTimestamp}:R>."),
                 ephemeral: true);
         }
         catch (Discord.Net.HttpException ex) when (ex.DiscordCode == DiscordErrorCode.MissingPermissions)

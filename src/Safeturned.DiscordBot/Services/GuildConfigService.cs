@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Safeturned.DiscordBot.Database;
@@ -12,13 +10,13 @@ public class GuildConfigService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger _logger;
-    private readonly IConfiguration _configuration;
+    private readonly IConfiguration _config;
     private readonly byte[]? _encryptionKey;
 
-    public GuildConfigService(IConfiguration configuration, IServiceScopeFactory scopeFactory, ILogger logger)
+    public GuildConfigService(IConfiguration config, IServiceScopeFactory scopeFactory, ILogger logger)
     {
-        _configuration = configuration;
-        _encryptionKey = Convert.FromBase64String(configuration.GetRequiredString("GuildConfigEncryptionKey"));
+        _config = config;
+        _encryptionKey = Convert.FromBase64String(config.GetRequiredString("GuildConfigEncryptionKey"));
         _scopeFactory = scopeFactory;
         _logger = logger.ForContext<GuildConfigService>();
     }
@@ -42,7 +40,7 @@ public class GuildConfigService
             db.GuildConfigurations.Add(config);
         }
 
-        config.EncryptedApiKey = EncryptApiKey(apiKey);
+        config.EncryptedApiKey = ApiKeyEncryption.Encrypt(apiKey, _encryptionKey);
         config.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
@@ -67,63 +65,12 @@ public class GuildConfigService
     public async Task<string?> GetApiKeyAsync(ulong guildId)
     {
         var config = await GetConfigAsync(guildId);
-        return config?.EncryptedApiKey != null ? DecryptApiKey(config.EncryptedApiKey) : null;
-    }
+        if (config?.EncryptedApiKey == null)
+            return null;
 
-    public bool IsOfficialGuild(ulong guildId)
-    {
-        var officialGuildId = _configuration["OfficialGuildId"];
-        return !string.IsNullOrEmpty(officialGuildId)
-            && ulong.TryParse(officialGuildId, out var id)
-            && id == guildId;
-    }
-
-    private string EncryptApiKey(string apiKey)
-    {
-        if (_encryptionKey == null)
-        {
-            return Convert.ToBase64String(Encoding.UTF8.GetBytes(apiKey));
-        }
-
-        using var aes = Aes.Create();
-        aes.Key = _encryptionKey;
-        aes.GenerateIV();
-
-        using var encryptor = aes.CreateEncryptor();
-        var plainBytes = Encoding.UTF8.GetBytes(apiKey);
-        var encryptedBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
-
-        var result = new byte[aes.IV.Length + encryptedBytes.Length];
-        aes.IV.CopyTo(result, 0);
-        encryptedBytes.CopyTo(result, aes.IV.Length);
-
-        return Convert.ToBase64String(result);
-    }
-
-    private string? DecryptApiKey(string encryptedApiKey)
-    {
         try
         {
-            var data = Convert.FromBase64String(encryptedApiKey);
-
-            if (_encryptionKey == null)
-            {
-                return Encoding.UTF8.GetString(data);
-            }
-
-            using var aes = Aes.Create();
-            aes.Key = _encryptionKey;
-
-            var iv = new byte[16];
-            var cipherText = new byte[data.Length - 16];
-            Array.Copy(data, 0, iv, 0, 16);
-            Array.Copy(data, 16, cipherText, 0, cipherText.Length);
-
-            aes.IV = iv;
-            using var decryptor = aes.CreateDecryptor();
-            var decryptedBytes = decryptor.TransformFinalBlock(cipherText, 0, cipherText.Length);
-
-            return Encoding.UTF8.GetString(decryptedBytes);
+            return ApiKeyEncryption.Decrypt(config.EncryptedApiKey, _encryptionKey);
         }
         catch (Exception ex)
         {
@@ -131,5 +78,10 @@ public class GuildConfigService
             SentrySdk.CaptureException(ex);
             return null;
         }
+    }
+
+    public bool IsOfficialGuild(ulong guildId)
+    {
+        return ulong.TryParse(_config.GetRequiredString("OfficialGuildId"), out var id) && id == guildId;
     }
 }

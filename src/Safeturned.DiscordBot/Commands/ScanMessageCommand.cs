@@ -1,12 +1,13 @@
 using Discord;
 using Discord.Interactions;
+using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 using Safeturned.DiscordBot.Helpers;
 using Safeturned.DiscordBot.Services;
 
 namespace Safeturned.DiscordBot.Commands;
 
-public class AnalyzeCommand : InteractionModuleBase<SocketInteractionContext>
+public class ScanMessageCommand : InteractionModuleBase<SocketInteractionContext>
 {
     private readonly SafeturnedApiClient _apiClient;
     private readonly GuildConfigService _guildConfig;
@@ -14,7 +15,7 @@ public class AnalyzeCommand : InteractionModuleBase<SocketInteractionContext>
     private readonly string _webBaseUrl;
     private static readonly string[] AllowedExtensions = [".dll"];
 
-    public AnalyzeCommand(
+    public ScanMessageCommand(
         SafeturnedApiClient apiClient,
         GuildConfigService guildConfig,
         IHttpClientFactory httpClientFactory,
@@ -26,18 +27,24 @@ public class AnalyzeCommand : InteractionModuleBase<SocketInteractionContext>
         _webBaseUrl = configuration.GetRequiredString("SafeturnedWebUrl").TrimEnd('/');
     }
 
-    [SlashCommand("analyze", "Analyze a .dll plugin file for security threats")]
-    public async Task AnalyzeAsync([Summary("file", "The .dll file to analyze")] IAttachment file)
+    [MessageCommand("Scan File")]
+    public async Task ScanMessageAsync(IMessage message)
     {
         await DeferAsync();
 
         try
         {
-            var extension = Path.GetExtension(file.Filename).ToLowerInvariant();
-            if (!AllowedExtensions.Contains(extension))
+            var attachments = message.Attachments
+                .Where(a => AllowedExtensions.Contains(Path.GetExtension(a.Filename).ToLowerInvariant()))
+                .ToList();
+
+            if (attachments.Count == 0)
             {
                 await FollowupAsync(
-                    embed: CreateErrorEmbed("Invalid File Type", $"Only `.dll` files are supported. You uploaded: `{extension}`"),
+                    embed: CreateErrorEmbed(
+                        "No DLL Files Found",
+                        "This message doesn't contain any `.dll` files to scan.\n\n" +
+                        "Make sure the message has a `.dll` attachment."),
                     ephemeral: true);
                 return;
             }
@@ -59,49 +66,78 @@ public class AnalyzeCommand : InteractionModuleBase<SocketInteractionContext>
                 }
             }
 
-            using var response = await _httpClient.GetAsync(file.Url);
-            if (!response.IsSuccessStatusCode)
+            var results = new List<(string fileName, AnalysisResult? result, string? error)>();
+
+            foreach (var attachment in attachments)
             {
-                await FollowupAsync(
-                    embed: CreateErrorEmbed("Download Failed", "Failed to download the attachment."),
-                    ephemeral: true);
-                return;
+                try
+                {
+                    using var response = await _httpClient.GetAsync(attachment.Url);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        results.Add((attachment.Filename, null, "Failed to download file"));
+                        continue;
+                    }
+
+                    await using var fileStream = await response.Content.ReadAsStreamAsync();
+                    var result = await _apiClient.AnalyzeFileAsync(fileStream, attachment.Filename, apiKey);
+                    results.Add((attachment.Filename, result, null));
+                }
+                catch (SafeturnedApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    results.Add((attachment.Filename, null, "Rate limit exceeded"));
+                }
+                catch (SafeturnedApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    results.Add((attachment.Filename, null, "Invalid API key"));
+                }
+                catch (Exception ex)
+                {
+                    SentrySdk.CaptureException(ex);
+                    results.Add((attachment.Filename, null, ex.Message));
+                }
             }
 
-            await using var fileStream = await response.Content.ReadAsStreamAsync();
-
-            var result = await _apiClient.AnalyzeFileAsync(fileStream, file.Filename, apiKey);
-
-            if (result == null)
+            if (results.Count == 1)
             {
-                await FollowupAsync(
-                    embed: CreateErrorEmbed("Analysis Failed", "Failed to analyze the file. Please try again."),
-                    ephemeral: true);
-                return;
+                var (fileName, result, error) = results[0];
+                if (result != null)
+                {
+                    var embed = CreateResultEmbed(result, fileName);
+                    var components = CreateResultComponents(result.Hash, _webBaseUrl);
+                    await FollowupAsync(embed: embed, components: components);
+                }
+                else
+                {
+                    await FollowupAsync(
+                        embed: CreateErrorEmbed("Analysis Failed", error ?? "Unknown error"),
+                        ephemeral: true);
+                }
             }
+            else
+            {
+                var embeds = new List<Embed>();
+                foreach (var (fileName, result, error) in results)
+                {
+                    if (result != null)
+                    {
+                        embeds.Add(CreateResultEmbed(result, fileName));
+                    }
+                    else
+                    {
+                        embeds.Add(CreateErrorEmbed($"Failed: {fileName}", error ?? "Unknown error"));
+                    }
+                }
 
-            var embed = CreateResultEmbed(result, file.Filename);
-            var components = CreateResultComponents(result.Hash, _webBaseUrl);
+                var successResults = results.Where(r => r.result != null).ToList();
+                MessageComponent? components = null;
+                if (successResults.Count == 1 && successResults[0].result != null)
+                {
+                    components = CreateResultComponents(successResults[0].result!.Hash, _webBaseUrl);
+                }
 
-            await FollowupAsync(embed: embed, components: components);
-        }
-        catch (SafeturnedApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-        {
-            await FollowupAsync(
-                embed: CreateErrorEmbed(
-                    "Rate Limit Exceeded",
-                    "You've exceeded your API rate limit.\n" +
-                    "Use `/usage` to check your limits or upgrade your plan at [safeturned.com/pricing](https://safeturned.com/pricing)"),
-                ephemeral: true);
-        }
-        catch (SafeturnedApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-        {
-            await FollowupAsync(
-                embed: CreateErrorEmbed(
-                    "Invalid API Key",
-                    "The configured API key is invalid.\n" +
-                    "A server administrator needs to run `/setup` with a valid API key."),
-                ephemeral: true);
+                await FollowupAsync(embeds: embeds.ToArray(), components: components);
+            }
         }
         catch (Exception ex)
         {

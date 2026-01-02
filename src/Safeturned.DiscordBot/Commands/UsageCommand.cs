@@ -25,7 +25,6 @@ public class UsageCommand : InteractionModuleBase<SocketInteractionContext>
 
         try
         {
-            // Get the appropriate API key
             string? apiKey;
             var isOfficial = _guildConfig.IsOfficialGuild(Context.Guild.Id);
 

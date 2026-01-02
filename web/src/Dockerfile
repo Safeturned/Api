@@ -8,17 +8,21 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG APP_VERSION=dev
+ARG NEXT_PUBLIC_API_URL=https://api.safeturned.com
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN echo "Build timestamp: $(date)" && \
     rm -rf .next && \
     npm run build
 
 FROM node:25-alpine AS runner
 WORKDIR /app
+ARG NEXT_PUBLIC_API_URL=https://api.safeturned.com
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
 USER nextjs
 

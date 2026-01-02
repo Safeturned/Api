@@ -1,12 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-export const dynamicParams = true;
-export const revalidate = false;
-export const fetchCache = 'force-no-store';
-export const runtime = 'nodejs';
-export const preferredRegion = 'auto';
-
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';

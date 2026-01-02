@@ -22,7 +22,7 @@ public class HelpCommand : InteractionModuleBase<SocketInteractionContext>
         var embed = new EmbedBuilder()
             .WithTitle("🛡️ Safeturned Bot Help")
             .WithDescription(
-                "Safeturned helps you scan Rust/Unturned plugin files (.dll) for security threats.\n\n" +
+                "Safeturned helps you scan Unturned plugin files (.dll) for security threats.\n\n" +
                 "**Available Commands:**")
             .WithColor(new Color(139, 92, 246))
             .AddField(
@@ -50,7 +50,6 @@ public class HelpCommand : InteractionModuleBase<SocketInteractionContext>
                 inline: false)
             .WithFooter("Safeturned Plugin Security Scanner • safeturned.com");
 
-        // Add status field
         if (isOfficial)
         {
             embed.AddField(
