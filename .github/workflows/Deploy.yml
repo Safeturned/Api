@@ -143,52 +143,9 @@ jobs:
         cp ./publish/aspire/docker-compose.yaml ./deploy/
         cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
 
-    - name: Create deploy script
+    - name: Prepare deploy package
       run: |
-        PROJECT="${{ steps.vars.outputs.project }}"
-
-        cat > ./deploy/deploy.sh << EOF
-        #!/bin/bash
-        set -e
-
-        PROJECT="$PROJECT"
-        VERSION="\$1"
-        BRANCH="\$2"
-        ENVIRONMENT="\$3"
-        REGISTRY_USER="\$4"
-        REGISTRY_PASS="\$5"
-
-        if [ -z "\$VERSION" ] || [ -z "\$BRANCH" ]; then
-          echo "Usage: \$0 <version> <branch> <environment> [registry_user] [registry_pass]"
-          exit 1
-        fi
-
-        echo "Deploying \$PROJECT version \$VERSION (\$ENVIRONMENT)"
-
-        if [ -n "\$REGISTRY_USER" ] && [ -n "\$REGISTRY_PASS" ]; then
-          echo "\$REGISTRY_PASS" | docker login ghcr.io -u "\$REGISTRY_USER" --password-stdin
-        fi
-
-        for service in api discordbot migrations web; do
-          VAR_NAME="\$(echo \${PROJECT}_\${service}_IMAGE | tr '[:lower:]' '[:upper:]' | tr '-' '_')"
-          IMAGE="ghcr.io/\${REGISTRY_USER}/\${PROJECT}-\${service}:\${VERSION}"
-
-          if grep -q "^\${VAR_NAME}=" .env 2>/dev/null; then
-            sed -i "s|^\${VAR_NAME}=.*|\${VAR_NAME}=\${IMAGE}|" .env
-          else
-            echo "\${VAR_NAME}=\${IMAGE}" >> .env
-          fi
-
-          echo "Pulling \$service..."
-          docker pull "\$IMAGE" || echo "Warning: Failed to pull \$service"
-        done
-
-        docker compose down 2>/dev/null || true
-        docker compose up -d
-
-        echo "Deployment complete"
-        EOF
-
+        cp ./.github/scripts/deploy.sh ./deploy/deploy.sh
         chmod +x ./deploy/deploy.sh
 
     - name: Copy to server
@@ -198,8 +155,8 @@ jobs:
         port: ${{ secrets.SSH_PORT }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/*"
-        target: "/opt/${{ env.PROJECT_NAME }}/deploy"
+        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml"
+        target: "/opt/${{ env.PROJECT_NAME }}"
 
     - name: Deploy on server
       uses: appleboy/ssh-action@v1.2.4
@@ -210,6 +167,7 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           cd /opt/${{ env.PROJECT_NAME }}/deploy
+          chmod +x deploy.sh
           ./deploy.sh "${{ steps.vars.outputs.version }}" "${{ steps.vars.outputs.branch }}" "${{ steps.vars.outputs.environment }}" "${{ steps.vars.outputs.owner }}" "${{ secrets.GITHUB_TOKEN }}"
 
   cleanup:
