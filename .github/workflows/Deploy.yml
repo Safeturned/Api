@@ -123,7 +123,11 @@ jobs:
         push_image "api" "latest"
         push_image "discordbot" "latest"
         push_image "migrations" "latest"
-        push_image "web" "latest"
+
+        # Web image may have commit hash tag instead of :latest
+        WEB_TAG=$(docker images --format '{{.Tag}}' "${PROJECT}-web" | head -n1)
+        echo "Found web image tag: $WEB_TAG"
+        push_image "web" "${WEB_TAG:-latest}"
 
         echo "All images pushed successfully"
 
