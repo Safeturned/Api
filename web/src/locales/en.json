@@ -1179,7 +1179,7 @@
             },
             "private": {
                 "title": "Private Analysis Channels",
-                "description": "Create temporary private channels for confidential scans. Channels auto-delete after 24 hours"
+                "description": "Create temporary private channels for confidential scans. Channels auto-delete after 10 minutes"
             },
             "protection": {
                 "title": "Server-Wide Protection",
@@ -1194,7 +1194,7 @@
                 "description": "Upload and scan a .dll file for malware. Attach a file and run this command to get instant analysis results."
             },
             "private": {
-                "description": "Create a temporary private channel for confidential analysis. The channel auto-deletes after 24 hours."
+                "description": "Create a temporary private channel for confidential analysis. The channel auto-deletes after 10 minutes."
             },
             "setup": {
                 "description": "Configure the Safeturned API key for your server. Required before using other commands."
