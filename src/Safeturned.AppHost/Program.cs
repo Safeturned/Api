@@ -1,4 +1,6 @@
 var builder = DistributedApplication.CreateBuilder(args);
+var config = builder.Configuration;
+var environment = builder.Environment;
 
 var env = builder.AddDockerComposeEnvironment("env");
 
@@ -22,10 +24,7 @@ var api = builder.AddProject<Projects.Safeturned_Api>("safeturned-api")
 var migrations = builder.AddProject<Projects.Safeturned_MigrationService>("safeturned-migrations")
     .WithReference(botDatabase)
     .WaitFor(botDatabase)
-    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
-
-var safeturnedBotApiKey = builder.Configuration["Discord:BotApiKey"] ?? "";
-var discordBotClientId = builder.Configuration["Discord:BotClientId"] ?? "";
+    .WithEnvironment("DOTNET_ENVIRONMENT", environment.EnvironmentName);
 
 var runMode = builder.ExecutionContext.IsRunMode;
 
@@ -35,7 +34,7 @@ if (runMode)
     web = builder.AddJavaScriptApp("safeturned-web", "../../web/src")
         .WithHttpEndpoint(port: 3000, env: "PORT")
         .WithEnvironment("NEXT_PUBLIC_API_URL", api.GetEndpoint("http"))
-        .WithEnvironment("NEXT_PUBLIC_DISCORD_BOT_CLIENT_ID", discordBotClientId)
+        .WithEnvironment("NEXT_PUBLIC_DISCORD_BOT_CLIENT_ID", config["Discord:BotClientId"] ?? "")
         .WithEnvironment("NEXT_TELEMETRY_DISABLED", "1")
         .WithReference(api)
         .WaitFor(api);
@@ -45,7 +44,7 @@ else
     web = builder.AddDockerfile("safeturned-web", "../../web/src")
         .WithHttpEndpoint(port: 3000, targetPort: 3000, env: "PORT")
         .WithEnvironment("API_URL", api.GetEndpoint("http"))
-        .WithEnvironment("NEXT_PUBLIC_DISCORD_BOT_CLIENT_ID", discordBotClientId)
+        .WithEnvironment("NEXT_PUBLIC_DISCORD_BOT_CLIENT_ID", "1436734963125981354")
         .WithReference(api)
         .WaitFor(api);
 }
@@ -56,9 +55,9 @@ builder.AddProject<Projects.Safeturned_DiscordBot>("safeturned-discordbot")
     .WaitFor(botDatabase)
     .WaitFor(api)
     .WithReference(api)
-    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithEnvironment("DOTNET_ENVIRONMENT", environment.EnvironmentName)
     .WithEnvironment("SafeturnedApiUrl", api.GetEndpoint("http"))
-    .WithEnvironment("SafeturnedBotApiKey", safeturnedBotApiKey)
+    .WithEnvironment("SafeturnedBotApiKey", config["Discord:BotApiKey"] ?? "")
     .WithEnvironment("SafeturnedWebUrl", web.GetEndpoint("http"));
 
 builder.Build().Run();
