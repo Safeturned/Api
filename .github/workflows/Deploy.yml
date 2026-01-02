@@ -18,7 +18,7 @@ jobs:
     - name: Set computed variables
       id: vars
       run: |
-        VERSION="v${{ github.run_number }}"
+        VERSION="${{ github.run_number }}"
         OWNER="${{ github.repository_owner }}"
         OWNER="${OWNER,,}"  # Docker requires lowercase
         PROJECT="${{ env.PROJECT_NAME }}"
