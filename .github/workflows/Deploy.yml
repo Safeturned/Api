@@ -60,6 +60,8 @@ jobs:
           DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
           Deployment__RemoteDeployPath: /opt/safeturned/deploy
           IMAGE_TAG_SUFFIX: build.${{ github.run_number }}.${{ env.SHORT_SHA }}
+          Parameters__DatabasePassword: ${{ secrets.DATABASE_PASSWORD }}
+          Parameters__RedisPassword: ${{ secrets.REDIS_PASSWORD }}
 
   cleanup:
     runs-on: ubuntu-latest

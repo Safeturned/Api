@@ -13,12 +13,24 @@ var postgres = builder.AddPostgres("database")
     .WithPgAdmin()
     .WithDataVolume();
 
+if (!runMode)
+{
+    var dbPassword = builder.AddParameter("DatabasePassword", secret: true);
+    postgres.WithPassword(dbPassword);
+}
+
 var apiDatabase = postgres.AddDatabase("safeturned-db");
 var botDatabase = postgres.AddDatabase("safeturned-botdb");
 
 var redis = builder.AddRedis("safeturned-redis")
     .WithDataVolume()
     .WithLifetime(ContainerLifetime.Persistent);
+
+if (!runMode)
+{
+    var redisPassword = builder.AddParameter("RedisPassword", secret: true);
+    redis.WithPassword(redisPassword);
+}
 
 var api = builder.AddProject<Projects.Safeturned_Api>(name: "safeturned-api", project => project.ExcludeLaunchProfile = true)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", environment.EnvironmentName)
