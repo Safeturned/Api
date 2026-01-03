@@ -2,8 +2,8 @@
 
 ## Requirements
 
-You'll need:
 - .NET 10.0 SDK
+- Node.js 22+
 - Docker Desktop
 - Git
 
@@ -11,8 +11,13 @@ You'll need:
 
 Clone the repo:
 ```bash
-git clone https://github.com/Safeturned/Api.git
-cd Api
+git clone https://github.com/Safeturned/Safeturned.git
+cd Safeturned
+```
+
+Initialize submodules:
+```bash
+git submodule update --init --recursive
 ```
 
 Install Aspire CLI:
@@ -20,55 +25,39 @@ Install Aspire CLI:
 dotnet tool install --global Aspire.Cli
 ```
 
-Run Docker Desktop
-
-Start the API with Aspire (handles PostgreSQL, pgAdmin, etc):
+Run Docker Desktop, then start everything with Aspire:
 ```bash
 aspire run
 ```
 
-The API runs at http://localhost:5000
+This starts:
+- **API**
+- **Website**
+- **PostgreSQL** + pgAdmin
+- **Redis**
+- **Discord Bot** (if configured)
 
 ## API Key
 
-The development API key is already configured in `appsettings.Development.json`:
+The development API key is configured in `src/Safeturned.AppHost/appsettings.Development.json`:
 
 ```
 sk_test_ABCDEFGHIJKLMNOPQRSTUVWXYZabcd
 ```
 
-When the API starts, it prints this key. It persists across database resets, so you don't need to reconfigure it.
+## Website Development
 
-## Using the WebSite
+The website is at `web/src`. Aspire runs it automatically, but you can also run it standalone:
 
-To run the WebSite locally with the API:
-
-1. Go to the WebSite folder:
 ```bash
-cd ../WebSite/src
-```
-
-2. Create `.env.local`:
-```bash
-cp .env.example .env.local
-```
-
-3. Add the API key to `.env.local`:
-```
-NEXT_PUBLIC_API_URL=http://localhost:5000
-SAFETURNED_API_KEY=sk_test_ABCDEFGHIJKLMNOPQRSTUVWXYZabcd
-```
-
-4. Start it:
-```bash
+cd web/src
+npm install
 npm run dev
 ```
 
-Now you have both API and WebSite running locally.
-
 ## Configuration
 
-Edit `appsettings.Development.json` to add your Discord credentials:
+Edit `src/Safeturned.AppHost/appsettings.Development.json` for Discord credentials:
 
 ```json
 {
@@ -78,7 +67,8 @@ Edit `appsettings.Development.json` to add your Discord credentials:
   },
   "Discord": {
     "ClientId": "your-app-id",
-    "ClientSecret": "your-secret"
+    "ClientSecret": "your-secret",
+    "BotClientId": "your-bot-client-id"
   }
 }
 ```

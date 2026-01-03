@@ -1,4 +1,7 @@
-# Safeturned WebSite
+# Safeturned Website
+
+<img src="src/public/favicon.jpg" width="64" />
+<br>
 
 A web application for scanning and analyzing Unturned server plugins for security threats and backdoors.
 

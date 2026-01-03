@@ -1,12 +1,25 @@
-# Safeturned API
+# Safeturned
 
-Backend API for the Safeturned security scanning service that protects Unturned servers from malicious plugins. This API handles plugin analysis, threat detection, and provides REST endpoints for the web interface.
+<img src="web/src/public/favicon.jpg" width="64" />
 
-**Try it now**: [https://safeturned.com](https://safeturned.com) - Upload and scan your Unturned plugins instantly!
+Security scanning service that protects Unturned servers from malicious plugins. Analyze .dll files for backdoors, suspicious patterns, and vulnerabilities.
 
-## What it does
+**Live**: [https://safeturned.com](https://safeturned.com)
 
-This API processes Unturned plugin files (.dll) and scans them for:
+## What's in this repo
+
+This is a monorepo containing all Safeturned services:
+
+| Service | Description | Tech |
+|---------|-------------|------|
+| **API** | REST API for plugin analysis | ASP.NET Core 10 |
+| **Website** | Web interface & dashboard | Next.js |
+| **Discord Bot** | Scan plugins directly in Discord | Discord.Net |
+
+All services are orchestrated with [.NET Aspire](https://aspire.dev/dashboard/overview/).
+
+## What it detects
+
 - Backdoors and malicious code
 - Suspicious patterns and functions
 - Security vulnerabilities
@@ -14,38 +27,38 @@ This API processes Unturned plugin files (.dll) and scans them for:
 
 ## Tech Stack
 
-- **Framework**: ASP.NET Core 10.0 with [Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
-- **Database**: PostgreSQL, [dbup](https://dbup.readthedocs.io/) & EF Core migrations
-- **Background Jobs**: [Hangfire](https://www.hangfire.io/)
-- **Logging**: [Serilog](https://serilog.net/)
-- **Error Tracking**: [Sentry](https://sentry.io/) & [Bugsink](https://www.bugsink.com/)
-- **API Documentation**: Swagger/OpenAPI
-- **Deployment**: GitHub Actions builds with Aspire, pushes to GHCR, and deploys via SSH, we do not make it via GH Release for simple!
-
-## API Documentation
-
-See our complete [API documentation](https://safeturned.com/docs) for:
-- Full endpoint reference
-- Request/response examples
-- Authentication details
-- Rate limiting info
-- Live API playground
-
-## For Developers
-
-Want to contribute or run locally?
-
-- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Complete local setup guide
+- **Orchestration**: .NET Aspire
+- **API**: ASP.NET Core 10.0
+- **Website**: Next.js 16, Tailwind CSS
+- **Database**: PostgreSQL
+- **Cache**: Redis
+- **Background Jobs**: Hangfire
+- **Logging**: Serilog
+- **Error Tracking**: Sentry & [Bugsink](https://www.bugsink.com/)
+- **Deployment**: GitHub Actions → GHCR → Docker Compose
 
 ## Project Structure
 
 ```
-Api/
-├── src/                         # Main API project
-├── Safeturned.AppHost/          # Aspire host
-├── Safeturned.ServiceDefaults/  # Shared services
-└── FileChecker/                 # Plugin analysis logic
+├── src/
+│   ├── Safeturned.Api/           # REST API
+│   ├── Safeturned.AppHost/       # Aspire orchestration
+│   ├── Safeturned.DiscordBot/    # Discord bot
+│   ├── Safeturned.MigrationService/
+│   └── Safeturned.ServiceDefaults/
+├── web/                          # Next.js website
+└── FileChecker/                  # Plugin analysis engine (submodule)
 ```
+
+## Documentation
+
+- **[API Docs](https://safeturned.com/docs)** - Endpoint reference & playground
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Local setup guide
+
+## Related Repositories
+
+- **[Plugins](https://github.com/Safeturned/Plugins)** - Unturned Server loader that auto-scans plugins
+- **[FileChecker](https://github.com/Safeturned/FileChecker)** - Core analysis engine
 
 ## License
 
