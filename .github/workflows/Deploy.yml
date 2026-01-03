@@ -3,174 +3,61 @@ name: Deploy
 on:
   workflow_dispatch:
 
-env:
-  PROJECT_NAME: safeturned
-  DOCKER_REGISTRY: ghcr.io
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: Production
     permissions:
       contents: read
       packages: write
 
     steps:
-    - name: Set computed variables
-      id: vars
-      run: |
-        VERSION="${{ github.run_number }}"
-        OWNER="${{ github.repository_owner }}"
-        OWNER="${OWNER,,}"  # Docker requires lowercase
-        PROJECT="${{ env.PROJECT_NAME }}"
-        DEPLOY_TAG="${PROJECT}-$(date +%Y%m%d%H%M%S)"
+      - name: Checkout code with submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-        if [ "${{ github.ref }}" = "refs/heads/master" ]; then
-          BRANCH="master"
-          ENVIRONMENT="production"
-        elif [ "${{ github.ref }}" = "refs/heads/dev" ]; then
-          BRANCH="dev"
-          ENVIRONMENT="development"
-        else
-          BRANCH="master"
-          ENVIRONMENT="production"
-        fi
+      - name: Force initialize submodule
+        run: |
+          git submodule add --force https://github.com/Safeturned/FileChecker.git FileChecker || true
+          git submodule update --init --recursive
 
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-        echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
-        echo "deploy_tag=$DEPLOY_TAG" >> $GITHUB_OUTPUT
-        echo "owner=$OWNER" >> $GITHUB_OUTPUT
-        echo "project=$PROJECT" >> $GITHUB_OUTPUT
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+        env:
+          DOTNET_NOLOGO: true
+          DOTNET_CLI_TELEMETRY_OPTOUT: true
 
-        echo "Version: $VERSION | Branch: $BRANCH | Environment: $ENVIRONMENT"
+      - name: Install Aspire CLI
+        run: curl -sSL https://aspire.dev/install.sh | bash
 
-    - name: Checkout code with submodules
-      uses: actions/checkout@v6
-      with:
-        submodules: recursive
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-    - name: Force initialize submodule
-      run: |
-        echo "=== Force initializing FileChecker submodule ==="
-        git submodule add --force https://github.com/Safeturned/FileChecker.git FileChecker || true
-        git submodule update --init --recursive
-        echo "=== Checking submodule status ==="
-        git submodule status
-        echo "=== FileChecker directory contents ==="
-        ls -la FileChecker/
+      - name: Add known hosts
+        run: ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: 10.x
-      env:
-        DOTNET_NOLOGO: true
-        DOTNET_CLI_TELEMETRY_OPTOUT: true
+      - name: Get short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      with:
-        driver: docker
-
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.DOCKER_REGISTRY }}
-        username: ${{ github.repository_owner }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Install Aspire CLI
-      run: dotnet tool install --global Aspire.Cli
-
-    - name: Build containers with Aspire
-      env:
-        APP_VERSION: ${{ steps.vars.outputs.version }}
-      run: |
-        PROJECT="${{ steps.vars.outputs.project }}"
-
-        aspire do build -c Release
-
-        echo "Built images:"
-        docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}' | grep "$PROJECT" || docker images
-
-    - name: Tag and push images
-      run: |
-        PROJECT="${{ steps.vars.outputs.project }}"
-        OWNER="${{ steps.vars.outputs.owner }}"
-        VERSION="${{ steps.vars.outputs.version }}"
-        BRANCH="${{ steps.vars.outputs.branch }}"
-        DEPLOY_TAG="${{ steps.vars.outputs.deploy_tag }}"
-        REGISTRY="${{ env.DOCKER_REGISTRY }}"
-
-        push_image() {
-          local name=$1
-          local source_tag=$2
-
-          local source="${PROJECT}-${name}:${source_tag}"
-          local target_base="${REGISTRY}/${OWNER}/${PROJECT}-${name}"
-
-          echo "Pushing ${name}..."
-          docker tag "$source" "${target_base}:${DEPLOY_TAG}"
-          docker tag "$source" "${target_base}:${VERSION}"
-          docker tag "$source" "${target_base}:${BRANCH}"
-          docker tag "$source" "${target_base}:latest"
-
-          docker push "${target_base}:${DEPLOY_TAG}"
-          docker push "${target_base}:${VERSION}"
-          docker push "${target_base}:${BRANCH}"
-          docker push "${target_base}:latest"
-        }
-
-        push_image "api" "latest"
-        push_image "discordbot" "latest"
-        push_image "migrations" "latest"
-
-        # Web image may have commit hash tag instead of :latest
-        WEB_TAG=$(docker images --format '{{.Tag}}' "${PROJECT}-web" | head -n1)
-        echo "Found web image tag: $WEB_TAG"
-        push_image "web" "${WEB_TAG:-latest}"
-
-        echo "All images pushed successfully"
-
-    - name: Generate deployment files
-      run: |
-        PROJECT="${{ steps.vars.outputs.project }}"
-        ASPIRE_PROJECT=$(find . -name "*.AppHost.csproj" | head -n 1)
-
-        mkdir -p ./publish/aspire ./deploy
-
-        aspire do publish-env --project "$ASPIRE_PROJECT" -c Release -o ./publish/aspire
-
-        cp ./publish/aspire/docker-compose.yaml ./deploy/
-        cp ./publish/aspire/.env ./deploy/ 2>/dev/null || true
-
-    - name: Prepare deploy package
-      run: |
-        cp ./.github/scripts/deploy.sh ./deploy/deploy.sh
-        chmod +x ./deploy/deploy.sh
-
-    - name: Copy to server
-      uses: appleboy/scp-action@v1
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        port: ${{ secrets.SSH_PORT }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "./deploy/deploy.sh,./deploy/docker-compose.yaml"
-        target: "/opt/${{ env.PROJECT_NAME }}"
-
-    - name: Deploy on server
-      uses: appleboy/ssh-action@v1.2.4
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        port: ${{ secrets.SSH_PORT }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          cd /opt/${{ env.PROJECT_NAME }}/deploy
-          chmod +x deploy.sh
-          ./deploy.sh "${{ steps.vars.outputs.version }}" "${{ steps.vars.outputs.branch }}" "${{ steps.vars.outputs.environment }}" "${{ steps.vars.outputs.owner }}" "${{ secrets.GITHUB_TOKEN }}"
+      - name: Deploy
+        working-directory: Api/src/Safeturned.AppHost
+        run: aspire deploy -e Production
+        env:
+          DockerSSH__TargetHost: ${{ secrets.SERVER_HOST }}
+          DockerSSH__SshUsername: ${{ secrets.SERVER_USER }}
+          DockerSSH__SshPort: ${{ secrets.SSH_PORT }}
+          DockerRegistry__RegistryUrl: ghcr.io
+          DockerRegistry__RepositoryPrefix: ${{ github.repository_owner }}/safeturned
+          DockerRegistry__RegistryUsername: ${{ github.actor }}
+          DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
+          Deployment__RemoteDeployPath: /opt/safeturned/deploy
+          IMAGE_TAG_SUFFIX: build.${{ github.run_number }}.${{ env.SHORT_SHA }}
 
   cleanup:
     runs-on: ubuntu-latest

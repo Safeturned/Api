@@ -1,8 +1,12 @@
+#pragma warning disable ASPIREPIPELINES003
+
 var builder = DistributedApplication.CreateBuilder(args);
 var config = builder.Configuration;
 var environment = builder.Environment;
+var imageTag = config["IMAGE_TAG_SUFFIX"];
 
-var env = builder.AddDockerComposeEnvironment("env");
+var env = builder.AddDockerComposeEnvironment("env")
+    .WithSshDeploySupport();
 
 var postgres = builder.AddPostgres("database")
     .WithPgAdmin()
@@ -51,7 +55,7 @@ else
         .WaitFor(api);
 }
 
-builder.AddProject<Projects.Safeturned_DiscordBot>("safeturned-discordbot")
+var discordBot = builder.AddProject<Projects.Safeturned_DiscordBot>("safeturned-discordbot")
     .WithReference(botDatabase)
     .WaitForCompletion(migrations)
     .WaitFor(botDatabase)
@@ -61,5 +65,16 @@ builder.AddProject<Projects.Safeturned_DiscordBot>("safeturned-discordbot")
     .WithEnvironment("SafeturnedApiUrl", api.GetEndpoint("http"))
     .WithEnvironment("SafeturnedBotApiKey", safeturnedBotApiKey)
     .WithEnvironment("SafeturnedWebUrl", runMode ? web.GetEndpoint("http").Url : "https://safeturned.com");
+
+if (!string.IsNullOrEmpty(imageTag))
+{
+    api.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
+    migrations.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
+    discordBot.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
+    if (!runMode)
+    {
+        web.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
+    }
+}
 
 builder.Build().Run();
