@@ -1,11 +1,12 @@
 #pragma warning disable ASPIREPIPELINES003
 
 var builder = DistributedApplication.CreateBuilder(args);
+var runMode = builder.ExecutionContext.IsRunMode;
 var config = builder.Configuration;
 var environment = builder.Environment;
 var imageTag = config["IMAGE_TAG_SUFFIX"];
 
-var env = builder.AddDockerComposeEnvironment("env")
+var env = builder.AddDockerComposeEnvironment("safeturned")
     .WithSshDeploySupport();
 
 var postgres = builder.AddPostgres("database")
@@ -19,19 +20,27 @@ var redis = builder.AddRedis("safeturned-redis")
     .WithDataVolume()
     .WithLifetime(ContainerLifetime.Persistent);
 
-var api = builder.AddProject<Projects.Safeturned_Api>("safeturned-api")
-    .WithHttpEndpoint(port: 8890, targetPort: 8890)
+var api = builder.AddProject<Projects.Safeturned_Api>(name: "safeturned-api", project => project.ExcludeLaunchProfile = true)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", environment.EnvironmentName)
     .WithReference(apiDatabase)
     .WithReference(redis)
     .WaitFor(apiDatabase)
     .WaitFor(redis);
+
+if (runMode)
+{
+    api.WithHttpEndpoint(name: "http");
+}
+else
+{
+    api.WithHttpEndpoint(port: 8890, targetPort: 8890, name: "http");
+}
 
 var migrations = builder.AddProject<Projects.Safeturned_MigrationService>("safeturned-migrations")
     .WithReference(botDatabase)
     .WaitFor(botDatabase)
     .WithEnvironment("DOTNET_ENVIRONMENT", environment.EnvironmentName);
 
-var runMode = builder.ExecutionContext.IsRunMode;
 var safeturnedBotApiKey = builder.AddParameter("SafeturnedBotApiKey", secret: true);
 
 IResourceBuilder<IResourceWithEndpoints> web;
@@ -64,8 +73,16 @@ var discordBot = builder.AddProject<Projects.Safeturned_DiscordBot>("safeturned-
     .WithReference(api)
     .WithEnvironment("DOTNET_ENVIRONMENT", environment.EnvironmentName)
     .WithEnvironment("SafeturnedApiUrl", api.GetEndpoint("http"))
-    .WithEnvironment("SafeturnedBotApiKey", safeturnedBotApiKey)
-    .WithEnvironment("SafeturnedWebUrl", runMode ? web.GetEndpoint("http").Url : "https://safeturned.com");
+    .WithEnvironment("SafeturnedBotApiKey", safeturnedBotApiKey);
+
+if (runMode)
+{
+    discordBot.WithEnvironment("SafeturnedWebUrl", web.GetEndpoint("http"));
+}
+else
+{
+    discordBot.WithEnvironment("SafeturnedWebUrl", "https://safeturned.com");
+}
 
 if (!string.IsNullOrEmpty(imageTag))
 {
