@@ -20,6 +20,7 @@ var redis = builder.AddRedis("safeturned-redis")
     .WithLifetime(ContainerLifetime.Persistent);
 
 var api = builder.AddProject<Projects.Safeturned_Api>("safeturned-api")
+    .WithHttpEndpoint(port: 8890, targetPort: 8890)
     .WithReference(apiDatabase)
     .WithReference(redis)
     .WaitFor(apiDatabase)
