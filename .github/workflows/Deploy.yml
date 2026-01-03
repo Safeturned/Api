@@ -46,7 +46,7 @@ jobs:
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Deploy
-        working-directory: Api/src/Safeturned.AppHost
+        working-directory: src/Safeturned.AppHost
         run: aspire deploy -e Production
         env:
           DockerSSH__TargetHost: ${{ secrets.SERVER_HOST }}
