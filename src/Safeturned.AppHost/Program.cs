@@ -4,7 +4,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 var runMode = builder.ExecutionContext.IsRunMode;
 var config = builder.Configuration;
 var environment = builder.Environment;
-var imageTag = config["IMAGE_TAG_SUFFIX"];
+var imageTag = config["IMAGE_TAG_SUFFIX"] ?? "dev";
 
 var env = builder.AddDockerComposeEnvironment("safeturned")
     .WithSshDeploySupport();
@@ -70,7 +70,7 @@ else
 {
     web = builder.AddDockerfile("safeturned-web", "../../web/src")
         .WithHttpEndpoint(port: 3000, targetPort: 3000, env: "PORT")
-        .WithBuildArg("APP_VERSION", Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev")
+        .WithBuildArg("APP_VERSION", imageTag)
         .WithEnvironment("API_URL", api.GetEndpoint("http"))
         .WithEnvironment("NEXT_PUBLIC_DISCORD_BOT_CLIENT_ID", "1436734963125981354")
         .WithReference(api)
