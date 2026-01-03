@@ -165,10 +165,10 @@
         "openSource": "Open Source",
         "viewSourceCode": "View Source Code",
         "fileChecker": "File Checker",
-        "apiServer": "API Server",
+        "apiServer": "Safeturned",
         "website": "Website",
         "plugins": "Plugins",
-        "apiRepository": "API Repository",
+        "apiRepository": "Safeturned Repository",
         "websiteRepository": "Website Repository",
         "fileCheckerRepository": "File Checker (Analyzer)",
         "pluginsRepository": "Plugins (Loader)"

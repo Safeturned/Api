@@ -165,10 +165,10 @@
         "openSource": "Открытый исходный код",
         "viewSourceCode": "Просмотр исходного кода",
         "fileChecker": "File Checker",
-        "apiServer": "API сервер",
+        "apiServer": "Safeturned",
         "website": "Веб-сайт",
         "plugins": "Плагины",
-        "apiRepository": "Репозиторий API",
+        "apiRepository": "Репозиторий Safeturned",
         "websiteRepository": "Репозиторий веб-сайта",
         "fileCheckerRepository": "File Checker (Анализатор)",
         "pluginsRepository": "Плагины (Загрузчик)"
