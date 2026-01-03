@@ -58,7 +58,7 @@ jobs:
           DockerRegistry__RepositoryPrefix: ${{ env.OWNER_LC }}/safeturned
           DockerRegistry__RegistryUsername: ${{ github.actor }}
           DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
-          Deployment__RemoteDeployPath: /opt/safeturned/deploy
+          Deployment__RemoteDeployPath: /opt/safeturned
           IMAGE_TAG_SUFFIX: build.${{ github.run_number }}.${{ env.SHORT_SHA }}
           Parameters__DatabasePassword: ${{ secrets.DATABASE_PASSWORD }}
           Parameters__RedisPassword: ${{ secrets.REDIS_PASSWORD }}
@@ -71,7 +71,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        package: [safeturned-api, safeturned-discordbot, safeturned-migrations, safeturned-web]
+        package: [api, discordbot, migrations, web]
     steps:
       - name: Delete old images
         uses: actions/delete-package-versions@v5

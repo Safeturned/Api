@@ -37,7 +37,7 @@ SentrySdk.Init(options =>
     options.AddExceptionFilterForType<OperationCanceledException>();
 });
 
-builder.AddNpgsqlDbContext<BotDbContext>("safeturned-botdb");
+builder.AddNpgsqlDbContext<BotDbContext>("botdb");
 
 services.AddSingleton(new DiscordSocketConfig
 {

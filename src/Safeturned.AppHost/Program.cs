@@ -13,7 +13,7 @@ var env = builder.AddDockerComposeEnvironment("safeturned")
         env.DefaultNetworkName = "safeturned-network";
     });
 
-var postgres = builder.AddPostgres("database")
+var postgres = builder.AddPostgres("postgres")
     .WithPgAdmin()
     .WithDataVolume();
 
@@ -23,10 +23,10 @@ if (!runMode)
     postgres.WithPassword(dbPassword);
 }
 
-var apiDatabase = postgres.AddDatabase("safeturned-db");
-var botDatabase = postgres.AddDatabase("safeturned-botdb");
+var apiDatabase = postgres.AddDatabase("db");
+var botDatabase = postgres.AddDatabase("botdb");
 
-var redis = builder.AddRedis("safeturned-redis")
+var redis = builder.AddRedis("redis")
     .WithDataVolume()
     .WithLifetime(ContainerLifetime.Persistent);
 
@@ -36,7 +36,7 @@ if (!runMode)
     redis.WithPassword(redisPassword);
 }
 
-var api = builder.AddProject<Projects.Safeturned_Api>(name: "safeturned-api", project => project.ExcludeLaunchProfile = true)
+var api = builder.AddProject<Projects.Safeturned_Api>(name: "api", project => project.ExcludeLaunchProfile = true)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", environment.EnvironmentName)
     .WithReference(apiDatabase)
     .WithReference(redis)
@@ -52,7 +52,7 @@ else
     api.WithHttpEndpoint(port: 8890, targetPort: 8890, name: "http");
 }
 
-var migrations = builder.AddProject<Projects.Safeturned_MigrationService>("safeturned-migrations")
+var migrations = builder.AddProject<Projects.Safeturned_MigrationService>("migrations")
     .WithReference(botDatabase)
     .WaitFor(botDatabase)
     .WithEnvironment("DOTNET_ENVIRONMENT", environment.EnvironmentName);
@@ -62,7 +62,7 @@ var safeturnedBotApiKey = builder.AddParameter("SafeturnedBotApiKey", secret: tr
 IResourceBuilder<IResourceWithEndpoints> web;
 if (runMode)
 {
-    web = builder.AddJavaScriptApp("safeturned-web", "../../web/src")
+    web = builder.AddJavaScriptApp("web", "../../web/src")
         .WithHttpEndpoint(port: 3000, env: "PORT")
         .WithEnvironment("NEXT_PUBLIC_API_URL", api.GetEndpoint("http"))
         .WithEnvironment("NEXT_PUBLIC_DISCORD_BOT_CLIENT_ID", config["Discord:BotClientId"] ?? "")
@@ -72,7 +72,7 @@ if (runMode)
 }
 else
 {
-    web = builder.AddDockerfile("safeturned-web", "../../web/src")
+    web = builder.AddDockerfile("web", "../../web/src")
         .WithHttpEndpoint(port: 3000, targetPort: 3000, env: "PORT")
         .WithBuildArg("APP_VERSION", imageTag)
         .WithEnvironment("API_URL", api.GetEndpoint("http"))
@@ -81,7 +81,7 @@ else
         .WaitFor(api);
 }
 
-var discordBot = builder.AddProject<Projects.Safeturned_DiscordBot>("safeturned-discordbot")
+var discordBot = builder.AddProject<Projects.Safeturned_DiscordBot>("discordbot")
     .WithReference(botDatabase)
     .WaitForCompletion(migrations)
     .WaitFor(botDatabase)

@@ -17,7 +17,7 @@ var configuration = builder.Configuration;
 
 var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
 
-builder.AddNpgsqlDbContext<BotDbContext>("safeturned-botdb", configureDbContextOptions: options =>
+builder.AddNpgsqlDbContext<BotDbContext>("botdb", configureDbContextOptions: options =>
 {
     options.UseNpgsql(npgsql => npgsql.MigrationsAssembly("Safeturned.MigrationService"));
     options.UseAsyncSeeding(async (dbContext, _, ct) =>

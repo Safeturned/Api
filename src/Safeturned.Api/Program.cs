@@ -54,7 +54,7 @@ var loggerFactory = new ServiceCollection()
 
 services.Configure<SecuritySettings>(config.GetSection("Security"));
 
-var dbConnectionString = config.GetRequiredConnectionString("safeturned-db");
+var dbConnectionString = config.GetRequiredConnectionString("db");
 var dbPrepare = new DatabasePreparator(loggerFactory, builder.Environment);
 dbPrepare
     .Add("Hangfire", dbConnectionString, DbPrepareType.PostgreSql, true)
@@ -113,7 +113,7 @@ catch (Exception ex)
     throw new InvalidOperationException($"Chunk storage directory is not writable: {chunkStoragePath}.", ex);
 }
 
-var redisConnectionString = config.GetRequiredConnectionString("safeturned-redis");
+var redisConnectionString = config.GetRequiredConnectionString("redis");
 services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = redisConnectionString;
