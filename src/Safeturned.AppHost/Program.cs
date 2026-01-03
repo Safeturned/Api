@@ -7,7 +7,11 @@ var environment = builder.Environment;
 var imageTag = config["IMAGE_TAG_SUFFIX"] ?? "dev";
 
 var env = builder.AddDockerComposeEnvironment("safeturned")
-    .WithSshDeploySupport();
+    .WithSshDeploySupport()
+    .WithProperties(env =>
+    {
+        env.DefaultNetworkName = "safeturned-network";
+    });
 
 var postgres = builder.AddPostgres("database")
     .WithPgAdmin()
