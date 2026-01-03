@@ -42,8 +42,10 @@ jobs:
       - name: Add known hosts
         run: ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Get short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      - name: Set environment variables
+        run: |
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
       - name: Deploy
         working-directory: src/Safeturned.AppHost
@@ -53,7 +55,7 @@ jobs:
           DockerSSH__SshUsername: ${{ secrets.SERVER_USER }}
           DockerSSH__SshPort: ${{ secrets.SSH_PORT }}
           DockerRegistry__RegistryUrl: ghcr.io
-          DockerRegistry__RepositoryPrefix: ${{ github.repository_owner }}/safeturned
+          DockerRegistry__RepositoryPrefix: ${{ env.OWNER_LC }}/safeturned
           DockerRegistry__RegistryUsername: ${{ github.actor }}
           DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
           Deployment__RemoteDeployPath: /opt/safeturned/deploy
