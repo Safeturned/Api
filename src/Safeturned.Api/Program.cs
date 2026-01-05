@@ -24,6 +24,7 @@ using Safeturned.Api.Jobs;
 using Safeturned.Api.Middleware;
 using Safeturned.Api.Models;
 using Safeturned.Api.Scripts.Files;
+using Safeturned.Api.Clients.FileChecker;
 using Safeturned.Api.Services;
 using Sentry.Hangfire;
 using Serilog;
@@ -77,6 +78,13 @@ builder.WebHost.UseSentry(x =>
 services.AddOpenApi();
 
 services.AddHttpClient();
+
+var fileCheckerUrl = config.GetRequiredString("FileChecker:Url");
+services.AddHttpClient<IFileCheckerClient, FileCheckerClient>(client =>
+{
+    client.BaseAddress = new Uri(fileCheckerUrl);
+    client.Timeout = TimeSpan.FromMinutes(2);
+});
 
 services.AddScoped<IFileCheckingService, FileCheckingService>();
 services.AddScoped<IChunkStorageService, ChunkStorageService>();

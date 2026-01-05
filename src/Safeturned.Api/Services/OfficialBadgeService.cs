@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
-using Safeturned.FileChecker;
 
 namespace Safeturned.Api.Services;
 
@@ -68,9 +67,7 @@ public class OfficialBadgeService : IOfficialBadgeService
             memoryStream.Position = 0;
             var processingContext = await _fileCheckingService.CheckFileAsync(memoryStream, cancellationToken);
 
-            memoryStream.Position = 0;
-            var assemblyMetadata = AssemblyMetadataHelper.ExtractMetadata(memoryStream);
-
+            var metadata = processingContext.Metadata;
             var fileData = new FileData
             {
                 Hash = fileHash,
@@ -82,12 +79,12 @@ public class OfficialBadgeService : IOfficialBadgeService
                 LastScanned = DateTime.UtcNow,
                 TimesScanned = 1,
                 UserId = badge.UserId,
-                AnalyzerVersion = Checker.Version,
-                AssemblyCompany = assemblyMetadata.Company,
-                AssemblyProduct = assemblyMetadata.Product,
-                AssemblyTitle = assemblyMetadata.Title,
-                AssemblyGuid = assemblyMetadata.Guid,
-                AssemblyCopyright = assemblyMetadata.Copyright
+                AnalyzerVersion = processingContext.Version,
+                AssemblyCompany = metadata?.Company,
+                AssemblyProduct = metadata?.Product,
+                AssemblyTitle = metadata?.Title,
+                AssemblyGuid = metadata?.Guid,
+                AssemblyCopyright = metadata?.Copyright
             };
 
             await filesDb.Set<FileData>().AddAsync(fileData, cancellationToken);
@@ -96,9 +93,9 @@ public class OfficialBadgeService : IOfficialBadgeService
             badge.UpdatedAt = DateTime.UtcNow;
             badge.VersionUpdateCount++;
             badge.TrackedFileName = fileName;
-            badge.TrackedAssemblyCompany = assemblyMetadata.Company;
-            badge.TrackedAssemblyProduct = assemblyMetadata.Product;
-            badge.TrackedAssemblyGuid = assemblyMetadata.Guid;
+            badge.TrackedAssemblyCompany = metadata?.Company;
+            badge.TrackedAssemblyProduct = metadata?.Product;
+            badge.TrackedAssemblyGuid = metadata?.Guid;
 
             await filesDb.SaveChangesAsync(cancellationToken);
 

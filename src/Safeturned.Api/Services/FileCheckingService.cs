@@ -1,31 +1,31 @@
-using dnlib.DotNet;
-using Safeturned.FileChecker;
-using Safeturned.FileChecker.Modules;
+using Safeturned.Api.Clients.FileChecker;
 
 namespace Safeturned.Api.Services;
 
-public class FileCheckingService : IFileCheckingService
+public class FileCheckingService(IFileCheckerClient fileCheckerClient, ILogger logger) : IFileCheckingService
 {
-    private readonly ILogger _logger;
+    private readonly ILogger _logger = logger.ForContext<FileCheckingService>();
 
-    public FileCheckingService(ILogger logger)
-    {
-        _logger = logger.ForContext<FileCheckingService>();
-    }
-
-    public async Task<IModuleProcessingContext> CheckFileAsync(Stream fileStream, CancellationToken cancellationToken = default)
+    public async Task<FileCheckResult> CheckFileAsync(Stream fileStream, CancellationToken cancellationToken = default)
     {
         try
         {
-            _logger.Information("Starting file check");
+            _logger.Information("Starting file check via FileChecker service");
             fileStream.Position = 0;
-            var context = Checker.Process(fileStream);
-            _logger.Information("File check completed. Score: {Score}, Checked: {Checked}", context.Score, context.Checked);
-            return context;
+
+            var result = await fileCheckerClient.AnalyzeAsync(fileStream, cancellationToken);
+
+            _logger.Information("File check completed. Score: {Score}, Checked: {Checked}", result.Score, result.Checked);
+            return result;
         }
         catch (OperationCanceledException)
         {
             _logger.Information("File check was cancelled");
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Error(ex, "Failed to communicate with FileChecker service");
             throw;
         }
         catch (Exception ex)
@@ -40,21 +40,22 @@ public class FileCheckingService : IFileCheckingService
         try
         {
             fileStream.Position = 0;
-            using var memoryStream = new MemoryStream();
-            await fileStream.CopyToAsync(memoryStream, cancellationToken);
-            memoryStream.Position = 0;
-            var module = ModuleDefMD.Load(memoryStream);
-            return module != null;
+            return await fileCheckerClient.ValidateAsync(fileStream, cancellationToken);
         }
         catch (OperationCanceledException)
         {
-            _logger.Debug("File processing was cancelled");
+            _logger.Debug("File validation was cancelled");
             return false;
         }
         catch (Exception ex)
         {
-            _logger.Debug(ex, "File is not a valid .NET assembly");
+            _logger.Debug(ex, "File validation failed");
             return false;
         }
+    }
+
+    public async Task<string> GetVersionAsync(CancellationToken cancellationToken = default)
+    {
+        return await fileCheckerClient.GetVersionAsync(cancellationToken);
     }
 }

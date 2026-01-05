@@ -2,6 +2,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Safeturned.Api.Clients.FileChecker;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
@@ -9,8 +10,6 @@ using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
 using Safeturned.Api.Services;
-using Safeturned.FileChecker;
-using Safeturned.FileChecker.Modules;
 
 namespace Safeturned.Api.Controllers;
 
@@ -108,18 +107,13 @@ public class FilesController : ControllerBase
             FileData fileData;
             if (existingFile == null)
             {
-                IModuleProcessingContext processingContext;
-                AssemblyMetadata assemblyMetadata;
+                FileCheckResult processingContext;
                 await using (var checkStream = file.OpenReadStream())
                 {
                     processingContext = await _fileCheckingService.CheckFileAsync(checkStream, cancellationToken);
                 }
 
-                await using (var metadataStream = file.OpenReadStream())
-                {
-                    assemblyMetadata = AssemblyMetadataHelper.ExtractMetadata(metadataStream);
-                }
-
+                var metadata = processingContext.Metadata;
                 fileData = new FileData
                 {
                     Hash = fileHash,
@@ -132,12 +126,12 @@ public class FilesController : ControllerBase
                     TimesScanned = 1,
                     UserId = validUserId,
                     ApiKeyId = apiKeyId,
-                    AnalyzerVersion = Checker.Version,
-                    AssemblyCompany = assemblyMetadata.Company,
-                    AssemblyProduct = assemblyMetadata.Product,
-                    AssemblyTitle = assemblyMetadata.Title,
-                    AssemblyGuid = assemblyMetadata.Guid,
-                    AssemblyCopyright = assemblyMetadata.Copyright
+                    AnalyzerVersion = processingContext.Version,
+                    AssemblyCompany = metadata?.Company,
+                    AssemblyProduct = metadata?.Product,
+                    AssemblyTitle = metadata?.Title,
+                    AssemblyGuid = metadata?.Guid,
+                    AssemblyCopyright = metadata?.Copyright
                 };
 
                 await filesDb.Set<FileData>().AddAsync(fileData, cancellationToken);
@@ -236,29 +230,24 @@ public class FilesController : ControllerBase
                 ));
             }
 
-            IModuleProcessingContext reProcessingContext;
-            AssemblyMetadata reAssemblyMetadata;
+            FileCheckResult reProcessingContext;
             await using (var checkStream = file.OpenReadStream())
             {
                 reProcessingContext = await _fileCheckingService.CheckFileAsync(checkStream);
             }
 
-            await using (var metadataStream = file.OpenReadStream())
-            {
-                reAssemblyMetadata = AssemblyMetadataHelper.ExtractMetadata(metadataStream);
-            }
-
+            var reMetadata = reProcessingContext.Metadata;
             existingFile.Score = (int)reProcessingContext.Score;
             existingFile.FileName = file.FileName;
             existingFile.SizeBytes = file.Length;
             existingFile.LastScanned = DateTime.UtcNow;
             existingFile.TimesScanned++;
-            existingFile.AnalyzerVersion = Checker.Version;
-            existingFile.AssemblyCompany = reAssemblyMetadata.Company;
-            existingFile.AssemblyProduct = reAssemblyMetadata.Product;
-            existingFile.AssemblyTitle = reAssemblyMetadata.Title;
-            existingFile.AssemblyGuid = reAssemblyMetadata.Guid;
-            existingFile.AssemblyCopyright = reAssemblyMetadata.Copyright;
+            existingFile.AnalyzerVersion = reProcessingContext.Version;
+            existingFile.AssemblyCompany = reMetadata?.Company;
+            existingFile.AssemblyProduct = reMetadata?.Product;
+            existingFile.AssemblyTitle = reMetadata?.Title;
+            existingFile.AssemblyGuid = reMetadata?.Guid;
+            existingFile.AssemblyCopyright = reMetadata?.Copyright;
             if (validUserId.HasValue && !existingFile.UserId.HasValue)
             {
                 existingFile.UserId = validUserId;
@@ -335,9 +324,10 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("version")]
-    public IActionResult GetAnalyzerVersion()
+    public async Task<IActionResult> GetAnalyzerVersion(CancellationToken cancellationToken = default)
     {
-        return Ok(new { version = Checker.Version });
+        var version = await _fileCheckingService.GetVersionAsync(cancellationToken);
+        return Ok(new { version });
     }
 
     [HttpGet("filename/{filename}")]

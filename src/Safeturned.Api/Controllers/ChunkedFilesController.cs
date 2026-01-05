@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Safeturned.Api.Clients.FileChecker;
 using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
@@ -8,8 +9,6 @@ using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
 using Safeturned.Api.Services;
-using Safeturned.FileChecker;
-using Safeturned.FileChecker.Modules;
 
 namespace Safeturned.Api.Controllers;
 
@@ -218,17 +217,13 @@ public class ChunkedFilesController : ControllerBase
                     null
                 ));
             }
-            IModuleProcessingContext processingContext;
+            FileCheckResult processingContext;
             await using (var stream = new FileStream(finalFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 processingContext = await _fileCheckingService.CheckFileAsync(stream, cancellationToken);
             }
 
-            AssemblyMetadata assemblyMetadata;
-            await using (var stream = new FileStream(finalFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-            {
-                assemblyMetadata = AssemblyMetadataHelper.ExtractMetadata(stream);
-            }
+            var metadata = processingContext.Metadata;
 
             var (userId, apiKeyId) = HttpContext.GetUserContext();
 
@@ -265,12 +260,12 @@ public class ChunkedFilesController : ControllerBase
                     TimesScanned = 1,
                     UserId = validUserId,
                     ApiKeyId = apiKeyId,
-                    AnalyzerVersion = Checker.Version,
-                    AssemblyCompany = assemblyMetadata.Company,
-                    AssemblyProduct = assemblyMetadata.Product,
-                    AssemblyTitle = assemblyMetadata.Title,
-                    AssemblyGuid = assemblyMetadata.Guid,
-                    AssemblyCopyright = assemblyMetadata.Copyright
+                    AnalyzerVersion = processingContext.Version,
+                    AssemblyCompany = metadata?.Company,
+                    AssemblyProduct = metadata?.Product,
+                    AssemblyTitle = metadata?.Title,
+                    AssemblyGuid = metadata?.Guid,
+                    AssemblyCopyright = metadata?.Copyright
                 };
 
                 await filesDb.Set<FileData>().AddAsync(fileData, cancellationToken);
@@ -307,12 +302,12 @@ public class ChunkedFilesController : ControllerBase
                 existingFile.SizeBytes = session.FileSizeBytes;
                 existingFile.LastScanned = DateTime.UtcNow;
                 existingFile.TimesScanned++;
-                existingFile.AnalyzerVersion = Checker.Version;
-                existingFile.AssemblyCompany = assemblyMetadata.Company;
-                existingFile.AssemblyProduct = assemblyMetadata.Product;
-                existingFile.AssemblyTitle = assemblyMetadata.Title;
-                existingFile.AssemblyGuid = assemblyMetadata.Guid;
-                existingFile.AssemblyCopyright = assemblyMetadata.Copyright;
+                existingFile.AnalyzerVersion = processingContext.Version;
+                existingFile.AssemblyCompany = metadata?.Company;
+                existingFile.AssemblyProduct = metadata?.Product;
+                existingFile.AssemblyTitle = metadata?.Title;
+                existingFile.AssemblyGuid = metadata?.Guid;
+                existingFile.AssemblyCopyright = metadata?.Copyright;
                 if (validUserId.HasValue && !existingFile.UserId.HasValue)
                 {
                     existingFile.UserId = validUserId;
@@ -364,13 +359,13 @@ public class ChunkedFilesController : ControllerBase
                 DateTime.UtcNow,
                 DateTime.UtcNow,
                 session.FileSizeBytes,
-                Checker.Version,
+                processingContext.Version,
                 null,
-                assemblyMetadata.Company,
-                assemblyMetadata.Product,
-                assemblyMetadata.Title,
-                assemblyMetadata.Guid,
-                assemblyMetadata.Copyright
+                metadata?.Company,
+                metadata?.Product,
+                metadata?.Title,
+                metadata?.Guid,
+                metadata?.Copyright
             ));
         }
         catch (Exception ex)

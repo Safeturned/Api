@@ -1,5 +1,7 @@
 #pragma warning disable ASPIREPIPELINES003
 
+using Aspire.Hosting.Docker.Resources.ServiceNodes.Swarm;
+
 var builder = DistributedApplication.CreateBuilder(args);
 var runMode = builder.ExecutionContext.IsRunMode;
 var config = builder.Configuration;
@@ -36,12 +38,42 @@ if (!runMode)
     redis.WithPassword(redisPassword);
 }
 
-var api = builder.AddProject<Projects.Safeturned_Api>(name: "api", project => project.ExcludeLaunchProfile = true)
+var checkerVersion = config["CHECKER_VERSION"] ?? $"{DateTime.UtcNow:yyyy.M.d}.0";
+var checkerVersionSuffix = config["CHECKER_VERSION_SUFFIX"] ?? "-dev";
+var fileChecker = builder.AddDockerfile("filechecker", "../../../FileChecker/src", "Safeturned.FileChecker.Service/Dockerfile")
+    .WithBuildArg("CHECKER_VERSION", checkerVersion)
+    .WithBuildArg("CHECKER_VERSION_SUFFIX", checkerVersionSuffix)
+    .WithHttpEndpoint(targetPort: 5080, name: "http");
+
+if (!runMode)
+{
+    fileChecker.PublishAsDockerComposeService((resource, service) =>
+    {
+        service.Deploy = new Deploy
+        {
+            Replicas = 3,
+            UpdateConfig = new UpdateConfig
+            {
+                Parallelism = "1",
+                Delay = "10s",
+                Order = "start-first"
+            }
+        };
+    });
+
+    builder.AddContainer("watchtower", "nickfedor/watchtower")
+        .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
+        .WithArgs("--interval", "300", "--cleanup", "filechecker");
+}
+
+var api = builder.AddProject<Projects.Safeturned_Api>("api", project => project.ExcludeLaunchProfile = true)
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", environment.EnvironmentName)
     .WithReference(apiDatabase)
     .WithReference(redis)
+    .WithEnvironment("FileChecker__Url", fileChecker.GetEndpoint("http"))
     .WaitFor(apiDatabase)
-    .WaitFor(redis);
+    .WaitFor(redis)
+    .WaitFor(fileChecker);
 
 if (runMode)
 {
@@ -105,6 +137,7 @@ if (!string.IsNullOrEmpty(imageTag))
     api.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
     migrations.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
     discordBot.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
+    fileChecker.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
     if (!runMode)
     {
         web.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
