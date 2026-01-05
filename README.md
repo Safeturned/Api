@@ -1,6 +1,6 @@
 # Safeturned
 
-<img src="web/src/public/favicon.jpg" width="64" />
+<img src="web/src/public/favicon.jpg" width="64" alt="safeturned logo"/>
 
 Security scanning service that protects Unturned servers from malicious plugins. Analyze .dll files for backdoors, suspicious patterns, and vulnerabilities.
 
@@ -10,11 +10,11 @@ Security scanning service that protects Unturned servers from malicious plugins.
 
 This is a monorepo containing all Safeturned services:
 
-| Service | Description | Tech |
-|---------|-------------|------|
-| **API** | REST API for plugin analysis | ASP.NET Core 10 |
-| **Website** | Web interface & dashboard | Next.js |
-| **Discord Bot** | Scan plugins directly in Discord | Discord.Net |
+| Service         | Description                      | Tech            |
+|-----------------|----------------------------------|-----------------|
+| **API**         | REST API for plugin analysis     | ASP.NET Core 10 |
+| **Website**     | Web interface & dashboard        | Next.js         |
+| **Discord Bot** | Scan plugins directly in Discord | Discord.Net     |
 
 All services are orchestrated with [.NET Aspire](https://aspire.dev/dashboard/overview/).
 
