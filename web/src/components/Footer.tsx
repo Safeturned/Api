@@ -116,7 +116,7 @@ export default function Footer() {
 
                     <div className='text-center space-y-1'>
                         <div className='text-gray-500 text-xs'>
-                            © 2025 Safeturned. {t('footer.allRightsReserved')}.
+                            © 2025{new Date().getFullYear() > 2025 ? `-${new Date().getFullYear()}` : ''} Safeturned. {t('footer.allRightsReserved')}.
                         </div>
                         <div className='text-gray-600 text-xs'>Website {getVersionString()}</div>
                     </div>
