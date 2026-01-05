@@ -44,6 +44,12 @@
         "processingTime": "Processing time",
         "checkedItemsTitle": "Checked items:",
         "analyzerVersion": "Analyzer Version:",
+        "versionTooltip": {
+            "format": "Version format:",
+            "ciBuild": "CI build • commit hash for traceability",
+            "devBuild": "Local development build",
+            "releaseBuild": "Release build"
+        },
         "updateAvailable": "Update Available",
         "whyRescan": "Why should I rescan?",
         "outdatedVersionInfo": "This file was scanned with FileChecker {{scanVersion}}. The latest version ({{latestVersion}}) includes improved detection capabilities. Reanalyzing will use the most current security checks.",

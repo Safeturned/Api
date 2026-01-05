@@ -713,8 +713,40 @@ export default function ResultPage() {
                                         d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
                                     />
                                 </svg>
-                                <span className='text-gray-500'>
-                                    {t('results.analyzerVersion')} {analyticsData.analyzerVersion}
+                                <span className='text-gray-500 group/version cursor-help relative'>
+                                    {t('results.analyzerVersion')}{' '}
+                                    {(() => {
+                                        const version = analyticsData.analyzerVersion || '';
+                                        const plusIndex = version.indexOf('+');
+                                        const dashIndex = version.lastIndexOf('-');
+                                        const suffixIndex = plusIndex !== -1 ? plusIndex : (dashIndex > version.lastIndexOf('.') ? dashIndex : -1);
+                                        if (suffixIndex === -1) return version;
+                                        const base = version.substring(0, suffixIndex);
+                                        const suffix = version.substring(suffixIndex);
+                                        return (
+                                            <>
+                                                {base}
+                                                <span className='opacity-30 group-hover/version:opacity-100 transition-opacity duration-200'>
+                                                    {suffix}
+                                                </span>
+                                            </>
+                                        );
+                                    })()}
+                                    <span className='absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-900 border border-purple-500/30 rounded-lg text-xs whitespace-nowrap opacity-0 invisible group-hover/version:opacity-100 group-hover/version:visible transition-all duration-200 pointer-events-none z-50 shadow-xl'>
+                                        <span className='font-medium text-purple-400'>{t('results.versionTooltip.format')}</span>
+                                        <span className='block text-gray-400 mt-1'>
+                                            <span className='text-white'>YYYY</span>.<span className='text-white'>M</span>.<span className='text-white'>D</span>.<span className='text-white'>Build</span>
+                                            <span className='text-gray-600'>+commit</span>
+                                        </span>
+                                        <span className='block text-gray-500 text-[10px] mt-1'>
+                                            {(() => {
+                                                const v = analyticsData.analyzerVersion || '';
+                                                if (v.includes('+')) return t('results.versionTooltip.ciBuild');
+                                                if (v.includes('-dev')) return t('results.versionTooltip.devBuild');
+                                                return t('results.versionTooltip.releaseBuild');
+                                            })()}
+                                        </span>
+                                    </span>
                                 </span>
                                 {isOutdated && (
                                     <span className='px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded-full'>
