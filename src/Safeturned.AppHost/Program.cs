@@ -38,12 +38,24 @@ if (!runMode)
     redis.WithPassword(redisPassword);
 }
 
-var checkerVersion = config["CHECKER_VERSION"] ?? $"{DateTime.UtcNow:yyyy.M.d}.0";
-var checkerVersionSuffix = config["CHECKER_VERSION_SUFFIX"] ?? "-dev";
-var fileChecker = builder.AddDockerfile("filechecker", "../../../FileChecker/src", "Safeturned.FileChecker.Service/Dockerfile")
-    .WithBuildArg("CHECKER_VERSION", checkerVersion)
-    .WithBuildArg("CHECKER_VERSION_SUFFIX", checkerVersionSuffix)
-    .WithHttpEndpoint(targetPort: 5080, name: "http");
+var fileCheckerLocalPath = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "../../FileChecker/src"));
+var useLocalFileChecker = runMode && Directory.Exists(fileCheckerLocalPath);
+
+IResourceBuilder<ContainerResource> fileChecker;
+if (useLocalFileChecker)
+{
+    var checkerVersion = config["CHECKER_VERSION"] ?? $"{DateTime.UtcNow:yyyy.M.d}.0";
+    var checkerVersionSuffix = config["CHECKER_VERSION_SUFFIX"] ?? "-dev";
+    fileChecker = builder.AddDockerfile("filechecker", "../../FileChecker/src", "Safeturned.FileChecker.Service/Dockerfile")
+        .WithBuildArg("CHECKER_VERSION", checkerVersion)
+        .WithBuildArg("CHECKER_VERSION_SUFFIX", checkerVersionSuffix)
+        .WithHttpEndpoint(targetPort: 5080, name: "http");
+}
+else
+{
+    fileChecker = builder.AddContainer("filechecker", "ghcr.io/safeturned/safeturned-filechecker:latest")
+        .WithHttpEndpoint(targetPort: 5080, name: "http");
+}
 
 if (!runMode)
 {
@@ -137,7 +149,6 @@ if (!string.IsNullOrEmpty(imageTag))
     api.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
     migrations.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
     discordBot.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
-    fileChecker.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);
     if (!runMode)
     {
         web.WithImagePushOptions(o => o.Options.RemoteImageTag = imageTag);

@@ -1,5 +1,3 @@
-using System.Net.Http.Json;
-
 namespace Safeturned.Api.Clients.FileChecker;
 
 public interface IFileCheckerClient

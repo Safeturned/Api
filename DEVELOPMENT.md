@@ -15,11 +15,6 @@ git clone https://github.com/Safeturned/Safeturned.git
 cd Safeturned
 ```
 
-Initialize submodules:
-```bash
-git submodule update --init --recursive
-```
-
 Install Aspire CLI:
 ```bash
 dotnet tool install --global Aspire.Cli
@@ -36,6 +31,18 @@ This starts:
 - **PostgreSQL** + pgAdmin
 - **Redis**
 - **Discord Bot** (if configured)
+- **FileChecker** (pulled from ghcr.io)
+
+## FileChecker Local Development
+
+By default, Aspire pulls the FileChecker image from `ghcr.io/safeturned/safeturned-filechecker:latest`.
+
+To develop FileChecker locally, initialize the submodule:
+```bash
+git submodule update --init
+```
+
+Aspire will automatically detect and build from the local Dockerfile instead. Changes you make to FileChecker can be committed and pushed from within the `FileChecker/` directory.
 
 ## API Key
 

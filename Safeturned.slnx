@@ -9,9 +9,17 @@
     <Project Path="src/Safeturned.MigrationService/Safeturned.MigrationService.csproj" />
     <Project Path="src/Safeturned.ServiceDefaults/Safeturned.ServiceDefaults.csproj" />
   </Folder>
-  <Folder Name="/FileChecker/" />
-  <Folder Name="/FileChecker/src/">
+  <Folder Name="/FileChecker/">
     <Project Path="FileChecker/src/Safeturned.FileChecker/Safeturned.FileChecker.csproj" />
+    <Project Path="FileChecker/src/Safeturned.FileChecker.Service/Safeturned.FileChecker.Service.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="DEVELOPMENT.md" />
+    <File Path="LICENSE" />
+    <File Path="nuget.config" />
+    <File Path="README.md" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Safeturned.Api/Safeturned.Api.csproj" />
