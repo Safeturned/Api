@@ -75,11 +75,13 @@ if (!runMode)
                 Order = "start-first"
             }
         };
+        service.Labels ??= [];
+        service.Labels["com.centurylinklabs.watchtower.scope"] = "filechecker";
     });
 
     builder.AddContainer("watchtower", "nickfedor/watchtower")
         .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
-        .WithArgs("--interval", "300", "--cleanup", "filechecker");
+        .WithArgs("--interval", "300", "--cleanup", "--scope", "filechecker");
 }
 
 var api = builder.AddProject<Projects.Safeturned_Api>("api", project => project.ExcludeLaunchProfile = true)
