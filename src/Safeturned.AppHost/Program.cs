@@ -24,6 +24,10 @@ if (!runMode)
     var dbPassword = builder.AddParameter("DatabasePassword", secret: true);
     postgres.WithPassword(dbPassword);
 }
+else
+{
+    postgres.WithLifetime(ContainerLifetime.Persistent);
+}
 
 var apiDatabase = postgres.AddDatabase("db");
 var botDatabase = postgres.AddDatabase("botdb");
@@ -44,7 +48,7 @@ var useLocalFileChecker = runMode && Directory.Exists(fileCheckerLocalPath);
 IResourceBuilder<ContainerResource> fileChecker;
 if (useLocalFileChecker)
 {
-    var checkerVersion = config["CHECKER_VERSION"] ?? $"{DateTime.UtcNow:yyyy.M.d}.0";
+    var checkerVersion = config["CHECKER_VERSION"] ?? $"{DateTime.UtcNow:yyyy.M.d.HHmm}";
     var checkerVersionSuffix = config["CHECKER_VERSION_SUFFIX"] ?? "-dev";
     fileChecker = builder.AddDockerfile("filechecker", "../../FileChecker/src", "Safeturned.FileChecker.Service/Dockerfile")
         .WithBuildArg("CHECKER_VERSION", checkerVersion)

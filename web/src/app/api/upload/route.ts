@@ -5,6 +5,14 @@ import { serverApiRequest, ServerApiError } from '@/lib/api-client-server';
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 const ALLOWED_FILE_TYPES = ['.dll'];
 
+interface AnalysisResult {
+    fileHash?: string;
+    jobId?: string;
+    pollUrl?: string;
+    message?: string;
+    [key: string]: unknown;
+}
+
 export async function POST(request: NextRequest) {
     try {
         const formData = await request.formData();
@@ -36,12 +44,26 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid file name' }, { status: 400 });
         }
 
-        const { data: result } = await serverApiRequest(request, 'files', {
+        const { data: result, status } = await serverApiRequest<AnalysisResult>(request, 'files', {
             method: 'POST',
             body: formData,
         });
 
-        const typedResult = result as { fileHash?: string; [key: string]: unknown };
+        if (status === 202 && result.jobId) {
+            const fileArrayBuffer = await file.arrayBuffer();
+            storeFile(result.jobId, fileArrayBuffer, file.name, file.type);
+
+            return NextResponse.json(
+                {
+                    pending: true,
+                    jobId: result.jobId,
+                    message: result.message || 'Analysis in progress',
+                },
+                { status: 202 }
+            );
+        }
+
+        const typedResult = result as AnalysisResult;
         const analysisId = typedResult.fileHash
             ? typedResult.fileHash.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
             : Date.now().toString();

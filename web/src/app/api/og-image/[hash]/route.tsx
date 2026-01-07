@@ -1,5 +1,12 @@
 import { ImageResponse } from 'next/og';
 import { NextRequest } from 'next/server';
+import {
+    RiskLevel,
+    getEffectiveRiskLevel,
+    getRiskColors,
+    getRiskLabel,
+    getRiskEmoji,
+} from '@/lib/risk-levels';
 
 const interBold = fetch(
     'https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.8/files/inter-latin-700-normal.woff'
@@ -16,20 +23,8 @@ interface FileData {
     sizeBytes: number;
     detectedType: string;
     lastScanned: string;
-}
-
-function getScoreColors(score: number): { primary: string; secondary: string; glow: string } {
-    if (score >= 75) return { primary: '#ff4757', secondary: '#ff6b81', glow: '#ff4757' };
-    if (score >= 50) return { primary: '#ffa502', secondary: '#ffbe76', glow: '#ffa502' };
-    if (score >= 25) return { primary: '#ffd93d', secondary: '#ffe066', glow: '#ffd93d' };
-    return { primary: '#2ed573', secondary: '#7bed9f', glow: '#2ed573' };
-}
-
-function getRiskLabel(score: number): string {
-    if (score >= 75) return 'DANGEROUS';
-    if (score >= 50) return 'SUSPICIOUS';
-    if (score >= 25) return 'CAUTION';
-    return 'SAFE';
+    adminVerdict?: string;
+    isReviewed?: boolean;
 }
 
 function truncateFileName(name: string, maxLength: number = 28): string {
@@ -91,9 +86,10 @@ export async function GET(
 }
 
 async function generateSuccessImage(fileData: FileData) {
-    const colors = getScoreColors(fileData.score);
-    const riskLabel = getRiskLabel(fileData.score);
-    const isSafe = fileData.score < 25;
+    const riskLevel = getEffectiveRiskLevel(fileData.score, fileData.adminVerdict);
+    const colors = getRiskColors(riskLevel);
+    const riskLabel = getRiskLabel(riskLevel);
+    const emoji = getRiskEmoji(riskLevel);
 
     const [fontBold, fontRegular] = await Promise.all([interBold, interRegular]);
 
@@ -195,15 +191,7 @@ async function generateSuccessImage(fileData: FileData) {
                     marginBottom: 40,
                 }}
             >
-                <span style={{ fontSize: 56, display: 'flex' }}>
-                    {isSafe
-                        ? '✅'
-                        : fileData.score >= 75
-                          ? '🚨'
-                          : fileData.score >= 50
-                            ? '⚠️'
-                            : '⚡'}
-                </span>
+                <span style={{ fontSize: 56, display: 'flex' }}>{emoji}</span>
                 <span
                     style={{
                         fontSize: 52,

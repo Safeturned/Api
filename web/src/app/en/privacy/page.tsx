@@ -14,7 +14,7 @@ export default function PrivacyPage() {
                         <h1 className='text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent pb-1 leading-tight'>
                             Privacy Notice
                         </h1>
-                        <p className='text-slate-400 text-sm'>Last updated: November 2025</p>
+                        <p className='text-slate-400 text-sm'>Last updated: January 2026</p>
                     </div>
 
                     <div className='space-y-6 text-gray-300'>
@@ -32,71 +32,91 @@ export default function PrivacyPage() {
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                2. Information We Do NOT Collect
+                                2. Account Information We Collect
                             </h2>
-                            <div className='bg-red-900/20 border border-red-500/30 rounded-lg p-4'>
-                                <h3 className='font-semibold text-red-300 mb-2'>
-                                    Important: We do NOT store your plugin files
+                            <p className='mb-4'>
+                                When you create an account using Discord or Steam authentication, we collect:
+                            </p>
+                            <div className='bg-slate-700/30 border border-slate-600/30 rounded-lg p-4 mb-4'>
+                                <h3 className='font-semibold text-slate-200 mb-2'>
+                                    Discord Authentication
                                 </h3>
                                 <ul className='list-disc list-inside space-y-1 ml-4'>
-                                    <li>
-                                        <strong>Plugin files (.dll)</strong> - Files are processed
-                                        in memory and immediately discarded
-                                    </li>
-                                    <li>
-                                        <strong>File content</strong> - We never store the actual
-                                        code or content of your plugins
-                                    </li>
-                                    <li>
-                                        <strong>Personal information</strong> - No names, emails,
-                                        addresses, or personal identifiers
-                                    </li>
-                                    <li>
-                                        <strong>User accounts</strong> - No registration or login
-                                        required
-                                    </li>
-                                    <li>
-                                        <strong>IP addresses</strong> - Only used temporarily for
-                                        rate limiting, not stored
-                                    </li>
+                                    <li><strong>Discord ID</strong> - Your unique Discord identifier</li>
+                                    <li><strong>Email address</strong> - From your Discord account</li>
+                                    <li><strong>Username</strong> - Your Discord username</li>
+                                    <li><strong>Avatar URL</strong> - Link to your Discord profile picture</li>
+                                </ul>
+                            </div>
+                            <div className='bg-slate-700/30 border border-slate-600/30 rounded-lg p-4'>
+                                <h3 className='font-semibold text-slate-200 mb-2'>
+                                    Steam Authentication
+                                </h3>
+                                <ul className='list-disc list-inside space-y-1 ml-4'>
+                                    <li><strong>Steam ID</strong> - Your unique Steam identifier</li>
+                                    <li><strong>Username</strong> - Your Steam display name</li>
+                                    <li><strong>Avatar URL</strong> - Link to your Steam profile picture</li>
                                 </ul>
                             </div>
                         </section>
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                3. Information We DO Collect
+                                3. File Analysis Data
                             </h2>
                             <div className='bg-green-900/20 border border-green-500/30 rounded-lg p-4'>
                                 <h3 className='font-semibold text-green-300 mb-2'>
-                                    File Metadata (for analysis purposes)
+                                    File Metadata We Store
+                                </h3>
+                                <ul className='list-disc list-inside space-y-1 ml-4'>
+                                    <li><strong>File hash</strong> - SHA-256 hash to identify files</li>
+                                    <li><strong>File name</strong> - Original filename</li>
+                                    <li><strong>File size</strong> - Size in bytes</li>
+                                    <li><strong>Detection type</strong> - Type of file detected</li>
+                                    <li><strong>Scan results</strong> - Security score and threat detection</li>
+                                    <li><strong>Scan timestamps</strong> - When the file was scanned</li>
+                                    <li><strong>Scan count</strong> - Number of times analyzed</li>
+                                </ul>
+                            </div>
+                            <div className='bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4 mt-4'>
+                                <h3 className='font-semibold text-yellow-300 mb-2'>
+                                    Assembly Metadata Extracted
+                                </h3>
+                                <p className='mb-2'>For .dll and .exe files, we extract and store:</p>
+                                <ul className='list-disc list-inside space-y-1 ml-4'>
+                                    <li><strong>Company name</strong> - From assembly attributes</li>
+                                    <li><strong>Product name</strong> - From assembly attributes</li>
+                                    <li><strong>Title</strong> - Assembly title</li>
+                                    <li><strong>GUID</strong> - Assembly identifier</li>
+                                    <li><strong>Copyright</strong> - Copyright information</li>
+                                </ul>
+                            </div>
+                        </section>
+
+                        <section className='pb-6 border-b border-slate-700/50'>
+                            <h2 className='text-2xl font-bold mb-4 text-purple-300'>
+                                4. Plugin Files
+                            </h2>
+                            <div className='bg-red-900/20 border border-red-500/30 rounded-lg p-4'>
+                                <h3 className='font-semibold text-red-300 mb-2'>
+                                    Important: File Handling
                                 </h3>
                                 <ul className='list-disc list-inside space-y-1 ml-4'>
                                     <li>
-                                        <strong>File hash</strong> - SHA-256 hash to identify
-                                        duplicate files
+                                        <strong>Temporary storage</strong> - Files are temporarily stored
+                                        during the upload and analysis process
                                     </li>
                                     <li>
-                                        <strong>File name</strong> - Original filename for reference
+                                        <strong>Automatic deletion</strong> - Files are deleted after
+                                        analysis is complete
                                     </li>
                                     <li>
-                                        <strong>File size</strong> - Size in bytes for analysis
+                                        <strong>No permanent storage</strong> - We do not permanently
+                                        store the actual file content
                                     </li>
                                     <li>
-                                        <strong>Detection type</strong> - Type of file detected
-                                        (e.g., &ldquo;Assembly&rdquo;)
-                                    </li>
-                                    <li>
-                                        <strong>Scan results</strong> - Security score and threat
-                                        detection results
-                                    </li>
-                                    <li>
-                                        <strong>Scan timestamps</strong> - When the file was first
-                                        and last scanned
-                                    </li>
-                                    <li>
-                                        <strong>Scan count</strong> - How many times the file has
-                                        been analyzed
+                                        <strong>Metadata only</strong> - Only metadata and analysis
+                                        results are retained
                                     </li>
                                 </ul>
                             </div>
@@ -104,41 +124,156 @@ export default function PrivacyPage() {
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                4. Analytics Data We Collect
+                                5. IP Addresses
                             </h2>
-                            <p>
-                                We collect aggregated analytics data to improve our service and
-                                understand usage patterns:
+                            <p className='mb-4'>
+                                We collect and store IP addresses in the following contexts:
                             </p>
                             <ul className='list-disc list-inside space-y-2 ml-4'>
                                 <li>
-                                    <strong>Total files scanned</strong> - Number of files processed
+                                    <strong>Authentication tokens</strong> - IP address recorded when
+                                    tokens are created
                                 </li>
                                 <li>
-                                    <strong>Threat detection statistics</strong> - Number of threats
-                                    detected vs safe files
+                                    <strong>Analysis jobs</strong> - IP address of the client requesting
+                                    file analysis
                                 </li>
                                 <li>
-                                    <strong>Scan performance metrics</strong> - Average scan time
-                                    and processing statistics
+                                    <strong>API usage logs</strong> - IP address for usage tracking and
+                                    abuse prevention
                                 </li>
                                 <li>
-                                    <strong>Average scan time</strong> - Service performance metrics
-                                </li>
-                                <li>
-                                    <strong>Average security scores</strong> - Overall security
-                                    trends
-                                </li>
-                                <li>
-                                    <strong>Scan date ranges</strong> - First and last scan dates
-                                    for analytics
+                                    <strong>Rate limiting</strong> - IP-based rate limiting to prevent abuse
                                 </li>
                             </ul>
                         </section>
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                5. How We Use Your Information
+                                6. API Keys
+                            </h2>
+                            <p className='mb-4'>
+                                When you generate API keys, we store:
+                            </p>
+                            <ul className='list-disc list-inside space-y-2 ml-4'>
+                                <li>
+                                    <strong>Hashed key</strong> - API keys are hashed and never stored
+                                    in plain text
+                                </li>
+                                <li>
+                                    <strong>Key metadata</strong> - Name, prefix, creation date,
+                                    expiration date
+                                </li>
+                                <li>
+                                    <strong>Scopes</strong> - Permissions assigned to the key
+                                </li>
+                                <li>
+                                    <strong>IP whitelist</strong> - If configured, allowed IP addresses
+                                </li>
+                                <li>
+                                    <strong>Usage statistics</strong> - Request counts, endpoints accessed,
+                                    response times
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section className='pb-6 border-b border-slate-700/50'>
+                            <h2 className='text-2xl font-bold mb-4 text-purple-300'>
+                                7. Cookies and Authentication
+                            </h2>
+                            <p className='mb-4'>
+                                We use the following cookies for authentication:
+                            </p>
+                            <div className='bg-slate-700/30 border border-slate-600/30 rounded-lg p-4'>
+                                <ul className='list-disc list-inside space-y-2 ml-4'>
+                                    <li>
+                                        <strong>access_token</strong> - JWT authentication token
+                                        (HTTP-only, 1 year expiry)
+                                    </li>
+                                    <li>
+                                        <strong>refresh_token</strong> - Session refresh token
+                                        (HTTP-only, 1 year expiry)
+                                    </li>
+                                    <li>
+                                        <strong>safeturned_oauth</strong> - OAuth state parameter
+                                        (temporary, for login flow)
+                                    </li>
+                                </ul>
+                            </div>
+                            <p className='mt-4 text-sm text-slate-400'>
+                                All authentication cookies are HTTP-only and cannot be accessed by
+                                JavaScript for security purposes.
+                            </p>
+                        </section>
+
+                        <section className='pb-6 border-b border-slate-700/50'>
+                            <h2 className='text-2xl font-bold mb-4 text-purple-300'>
+                                8. Third-Party Services
+                            </h2>
+                            <p className='mb-4'>
+                                We use the following third-party services:
+                            </p>
+                            <ul className='list-disc list-inside space-y-2 ml-4'>
+                                <li>
+                                    <strong>Sentry</strong> - Error tracking and monitoring. Receives
+                                    error messages, stack traces, and application versions. No file
+                                    content is sent.
+                                </li>
+                                <li>
+                                    <strong>Discord API</strong> - Used only for authentication.
+                                    We request your Discord ID, email, username, and avatar.
+                                </li>
+                                <li>
+                                    <strong>Steam API</strong> - Used only for authentication.
+                                    We request your Steam ID, username, and avatar.
+                                </li>
+                                <li>
+                                    <strong>GitHub</strong> - Webhook processing for software releases
+                                    and updates.
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section className='pb-6 border-b border-slate-700/50'>
+                            <h2 className='text-2xl font-bold mb-4 text-purple-300'>
+                                9. Discord Bot Data
+                            </h2>
+                            <p className='mb-4'>
+                                If you use our Discord bot, we store:
+                            </p>
+                            <ul className='list-disc list-inside space-y-2 ml-4'>
+                                <li>
+                                    <strong>Server ID</strong> - Discord server identifier where the
+                                    bot is configured
+                                </li>
+                                <li>
+                                    <strong>API key association</strong> - Encrypted reference to the
+                                    API key configured for the server
+                                </li>
+                                <li>
+                                    <strong>Configuration settings</strong> - Bot settings for the server
+                                </li>
+                            </ul>
+                        </section>
+
+                        <section className='pb-6 border-b border-slate-700/50'>
+                            <h2 className='text-2xl font-bold mb-4 text-purple-300'>
+                                10. Analytics Data
+                            </h2>
+                            <p className='mb-4'>
+                                We collect aggregated analytics to improve our service:
+                            </p>
+                            <ul className='list-disc list-inside space-y-2 ml-4'>
+                                <li><strong>Total files scanned</strong> - Number of files processed</li>
+                                <li><strong>Threat statistics</strong> - Detection rates and patterns</li>
+                                <li><strong>Performance metrics</strong> - Scan times and processing stats</li>
+                                <li><strong>Average security scores</strong> - Overall trends</li>
+                            </ul>
+                        </section>
+
+                        <section className='pb-6 border-b border-slate-700/50'>
+                            <h2 className='text-2xl font-bold mb-4 text-purple-300'>
+                                11. How We Use Your Information
                             </h2>
                             <ul className='list-disc list-inside space-y-2 ml-4'>
                                 <li>
@@ -146,129 +281,138 @@ export default function PrivacyPage() {
                                     scanning services
                                 </li>
                                 <li>
+                                    <strong>Account Management</strong> - To manage your account and
+                                    authentication
+                                </li>
+                                <li>
                                     <strong>Service Improvement</strong> - To enhance our detection
                                     algorithms and performance
                                 </li>
                                 <li>
-                                    <strong>Duplicate Detection</strong> - To avoid re-analyzing the
-                                    same files
+                                    <strong>Rate Limiting</strong> - To prevent abuse and ensure fair usage
                                 </li>
                                 <li>
-                                    <strong>Rate Limiting</strong> - To prevent abuse and ensure
-                                    fair usage
+                                    <strong>Error Monitoring</strong> - To identify and fix technical issues
                                 </li>
                                 <li>
-                                    <strong>Error Monitoring</strong> - To identify and fix
-                                    technical issues (no file content included)
+                                    <strong>Communication</strong> - To notify you about service updates
+                                    if applicable
                                 </li>
                             </ul>
                         </section>
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                6. Data Protection
+                                12. Data Protection
                             </h2>
                             <ul className='list-disc list-inside space-y-2 ml-4'>
                                 <li>
-                                    <strong>No file storage</strong> - Plugin files are never saved
-                                    to disk
+                                    <strong>Encryption in transit</strong> - All data transmitted over HTTPS
                                 </li>
                                 <li>
-                                    <strong>Memory-only processing</strong> - Files are processed in
-                                    RAM and immediately discarded
+                                    <strong>Hashed credentials</strong> - API keys are hashed, never
+                                    stored in plain text
                                 </li>
                                 <li>
-                                    <strong>Encrypted transmission</strong> - All data is
-                                    transmitted over HTTPS
+                                    <strong>HTTP-only cookies</strong> - Authentication tokens cannot be
+                                    accessed by JavaScript
                                 </li>
                                 <li>
-                                    <strong>Database security</strong> - Only metadata is stored in
-                                    secure databases
+                                    <strong>Database security</strong> - Data stored in secure databases
+                                    with access controls
                                 </li>
                                 <li>
-                                    <strong>Log filtering</strong> - File uploads are filtered from
-                                    error logs
+                                    <strong>OAuth security</strong> - Industry-standard OAuth 2.0 for
+                                    authentication
                                 </li>
                             </ul>
                         </section>
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                7. Data Retention
+                                13. Data Retention
                             </h2>
                             <ul className='list-disc list-inside space-y-2 ml-4'>
                                 <li>
-                                    <strong>File metadata</strong> - Retained indefinitely for
-                                    duplicate detection and analytics
+                                    <strong>Account data</strong> - Retained until you delete your account
+                                </li>
+                                <li>
+                                    <strong>File metadata</strong> - Retained indefinitely for duplicate
+                                    detection and analytics
                                 </li>
                                 <li>
                                     <strong>Scan records</strong> - Retained for service improvement
-                                    and analytics
                                 </li>
                                 <li>
-                                    <strong>Analytics data</strong> - Aggregated statistics retained
-                                    for service optimization
+                                    <strong>API usage logs</strong> - Retained for analytics and abuse
+                                    prevention
                                 </li>
                                 <li>
-                                    <strong>Plugin files</strong> - Never stored, immediately
-                                    discarded after analysis
+                                    <strong>Plugin files</strong> - Deleted after analysis, not permanently
+                                    stored
                                 </li>
                             </ul>
                         </section>
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                8. Data Sharing
+                                14. Data Sharing
                             </h2>
-                            <p>
-                                We do not sell, trade, or otherwise transfer your information to
-                                third parties. We may share:
+                            <p className='mb-4'>
+                                We do not sell, trade, or otherwise transfer your personal information
+                                to third parties. We may share:
                             </p>
                             <ul className='list-disc list-inside space-y-2 ml-4'>
                                 <li>
-                                    <strong>Aggregated analytics</strong> - Public statistics (no
-                                    individual file data)
+                                    <strong>Aggregated analytics</strong> - Public statistics with no
+                                    individual data
                                 </li>
                                 <li>
-                                    <strong>Service providers</strong> - Only for technical
-                                    infrastructure (no file content)
+                                    <strong>Service providers</strong> - Technical infrastructure providers
+                                    (no file content)
                                 </li>
                                 <li>
                                     <strong>Legal requirements</strong> - Only if required by law
-                                    (extremely unlikely given our data practices)
                                 </li>
                             </ul>
                         </section>
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                9. Your Rights
+                                15. Your Rights
                             </h2>
-                            <p>
-                                Since we don&apos;t collect personal information, traditional
-                                privacy rights don&apos;t apply. However, you can:
-                            </p>
+                            <p className='mb-4'>You have the right to:</p>
                             <ul className='list-disc list-inside space-y-2 ml-4'>
                                 <li>
-                                    <strong>Stop using the service</strong> - No account required,
-                                    simply stop uploading files
+                                    <strong>Access your data</strong> - Request information about what
+                                    data we hold about you
                                 </li>
                                 <li>
-                                    <strong>Contact us</strong> - For questions about our privacy
-                                    practices
+                                    <strong>Delete your account</strong> - Request deletion of your
+                                    account and associated data
                                 </li>
                                 <li>
-                                    <strong>Review our code</strong> - All code is open source and
-                                    publicly available
+                                    <strong>Unlink providers</strong> - Remove connected Discord or
+                                    Steam accounts
+                                </li>
+                                <li>
+                                    <strong>Revoke API keys</strong> - Delete any API keys you have created
+                                </li>
+                                <li>
+                                    <strong>Stop using the service</strong> - You can stop using the
+                                    service at any time
+                                </li>
+                                <li>
+                                    <strong>Contact us</strong> - For questions about our privacy practices
                                 </li>
                             </ul>
                         </section>
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                10. Open Source Transparency
+                                16. Open Source Transparency
                             </h2>
-                            <p>Safeturned is completely open source. You can:</p>
+                            <p>Safeturned is open source. You can:</p>
                             <ul className='list-disc list-inside space-y-2 ml-4'>
                                 <li>
                                     <strong>Review our code</strong> - All source code is publicly
@@ -290,7 +434,7 @@ export default function PrivacyPage() {
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                11. Changes to This Notice
+                                17. Changes to This Notice
                             </h2>
                             <p>
                                 We may update this Privacy Notice from time to time. Changes will be
@@ -301,7 +445,7 @@ export default function PrivacyPage() {
 
                         <section className='pb-6 border-b border-slate-700/50'>
                             <h2 className='text-2xl font-bold mb-4 text-purple-300'>
-                                12. Contact Information
+                                18. Contact Information
                             </h2>
                             <p>
                                 If you have any questions about this Privacy Notice or our data

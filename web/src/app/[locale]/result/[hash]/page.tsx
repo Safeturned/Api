@@ -12,22 +12,38 @@ import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import Image from 'next/image';
 import { formatFileSize, getRiskLevel, getRiskColor, encodeHashForUrl } from '@/lib/utils';
+import {
+    RiskLevel,
+    getEffectiveRiskLevel,
+    getRiskBgClass,
+} from '@/lib/risk-levels';
 import DynamicMetaTags from '@/components/DynamicMetaTags';
-import { api } from '@/lib/api-client';
+import { api, isPendingResponse, pollJobUntilComplete } from '@/lib/api-client';
+
+interface FeatureResult {
+    name: string;
+    score: number;
+    messages?: string[];
+}
 
 interface AnalyticsData {
     fileName: string;
     score: number;
-    checked: string[];
     messageType: string;
     lastScanned: string;
     fileSizeBytes: number;
     analyzerVersion?: string;
+    features?: FeatureResult[];
     assemblyCompany?: string;
     assemblyProduct?: string;
     assemblyTitle?: string;
     assemblyGuid?: string;
     assemblyCopyright?: string;
+    adminVerdict?: string;
+    adminMessage?: string;
+    adminReviewedAt?: string;
+    isReviewed?: boolean;
+    isTakenDown?: boolean;
 }
 
 interface SecurityCheck {
@@ -60,6 +76,24 @@ const BLACKLISTED_COMMANDS_MAP: Record<string, SecurityCheck> = {
         icon: '🔨',
     },
 };
+
+const VERDICT_LABEL_MAP: Record<string, string> = {
+    None: 'None',
+    Clean: 'Clean',
+    Trusted: 'Trusted',
+    Suspicious: 'Suspicious',
+    Malware: 'Malware',
+    PUP: 'PUP',
+    FalsePositive: 'False Positive',
+    TakenDown: 'Taken Down',
+    Harmful: 'Harmful',
+};
+
+const getVerdictLabel = (verdict: string | undefined): string => {
+    if (!verdict) return 'None';
+    return VERDICT_LABEL_MAP[verdict] || verdict;
+};
+
 
 function getSecurityCheckInfo(checkText: string): SecurityCheck {
     const lowerCheck = checkText.toLowerCase();
@@ -286,11 +320,21 @@ export default function ResultPage() {
                 const formData = new FormData();
                 formData.append('file', dragFile, dragFile.name);
 
-                const result = (await api.post('/api/upload', formData)) as {
+                const uploadResponse = (await api.post('/api/upload', formData)) as {
                     id?: string;
                     fileHash?: string;
                     hash?: string;
                 };
+
+                let result: { id?: string; fileHash?: string; hash?: string };
+
+                if (isPendingResponse(uploadResponse)) {
+                    result = await pollJobUntilComplete<{ id?: string; fileHash?: string; hash?: string }>(
+                        uploadResponse.jobId!
+                    );
+                } else {
+                    result = uploadResponse;
+                }
 
                 if (typeof window !== 'undefined') {
                     sessionStorage.setItem('uploadResult', JSON.stringify(result));
@@ -399,7 +443,14 @@ export default function ResultPage() {
                 forceAnalyze: true,
             });
 
-            setAnalyticsData(result);
+            setAnalyticsData({
+                ...result,
+                adminVerdict: analyticsData.adminVerdict,
+                adminMessage: analyticsData.adminMessage,
+                adminReviewedAt: analyticsData.adminReviewedAt,
+                isReviewed: analyticsData.isReviewed,
+                isTakenDown: analyticsData.isTakenDown,
+            });
             setNotification({
                 message: t('results.reanalysisSuccess'),
                 type: 'success',
@@ -502,19 +553,20 @@ export default function ResultPage() {
 
     let metaDescription = '';
     let metaTitle = '';
+    const effectiveRisk = getEffectiveRiskLevel(analyticsData.score, analyticsData.adminVerdict);
 
-    if (analyticsData.score >= 80) {
+    if (effectiveRisk === RiskLevel.HIGH) {
         metaTitle = `HIGH RISK: ${analyticsData.fileName} - Scan Result`;
-        metaDescription = `HIGH RISK - "${analyticsData.fileName}" scored ${analyticsData.score}/100 in security analysis. Signs of malicious behavior detected. Do not use this file.`;
-    } else if (analyticsData.score >= 60) {
+        metaDescription = `HIGH RISK - "${analyticsData.fileName}" scored ${analyticsData.score}/100 in security analysis. ${analyticsData.adminVerdict ? `Moderator verdict: ${getVerdictLabel(analyticsData.adminVerdict)}.` : 'Signs of malicious behavior detected.'} Do not use this file.`;
+    } else if (effectiveRisk === RiskLevel.MODERATE) {
         metaTitle = `SUSPICIOUS: ${analyticsData.fileName} - Scan Result`;
-        metaDescription = `SUSPICIOUS - "${analyticsData.fileName}" scored ${analyticsData.score}/100. Potentially unsafe behavior detected. Use with extreme caution.`;
-    } else if (analyticsData.score >= 30) {
+        metaDescription = `SUSPICIOUS - "${analyticsData.fileName}" scored ${analyticsData.score}/100. ${analyticsData.adminVerdict ? `Moderator verdict: ${getVerdictLabel(analyticsData.adminVerdict)}.` : 'Potentially unsafe behavior detected.'} Use with extreme caution.`;
+    } else if (effectiveRisk === RiskLevel.LOW) {
         metaTitle = `Minor Concerns: ${analyticsData.fileName} - Scan Result`;
-        metaDescription = `Minor concerns found in "${analyticsData.fileName}" (${analyticsData.score}/100). Review recommended before using this file.`;
+        metaDescription = `Minor concerns found in "${analyticsData.fileName}" (${analyticsData.score}/100). ${analyticsData.adminVerdict ? `Moderator verdict: ${getVerdictLabel(analyticsData.adminVerdict)}.` : ''} Review recommended before using this file.`;
     } else {
         metaTitle = `CLEAN: ${analyticsData.fileName} - Scan Result`;
-        metaDescription = `CLEAN - "${analyticsData.fileName}" passed security scan (${analyticsData.score}/100). No malicious behavior detected. Safe to use.`;
+        metaDescription = `CLEAN - "${analyticsData.fileName}" passed security scan (${analyticsData.score}/100). ${analyticsData.adminVerdict && analyticsData.adminVerdict !== 'None' ? `Verified by moderator: ${getVerdictLabel(analyticsData.adminVerdict)}.` : 'No malicious behavior detected.'} Safe to use.`;
     }
 
     const pageUrl = typeof window !== 'undefined' ? window.location.href : '';
@@ -735,8 +787,13 @@ export default function ResultPage() {
                                     <span className='absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-900 border border-purple-500/30 rounded-lg text-xs whitespace-nowrap opacity-0 invisible group-hover/version:opacity-100 group-hover/version:visible transition-all duration-200 pointer-events-none z-50 shadow-xl'>
                                         <span className='font-medium text-purple-400'>{t('results.versionTooltip.format')}</span>
                                         <span className='block text-gray-400 mt-1'>
-                                            <span className='text-white'>YYYY</span>.<span className='text-white'>M</span>.<span className='text-white'>D</span>.<span className='text-white'>Build</span>
-                                            <span className='text-gray-600'>+commit</span>
+                                            {(() => {
+                                                const v = analyticsData.analyzerVersion || '';
+                                                if (v.includes('-dev')) {
+                                                    return (<><span className='text-white'>YYYY</span>.<span className='text-white'>M</span>.<span className='text-white'>D</span>.<span className='text-white'>HHmm</span><span className='text-gray-600'>-dev</span></>);
+                                                }
+                                                return (<><span className='text-white'>YYYY</span>.<span className='text-white'>M</span>.<span className='text-white'>D</span>.<span className='text-white'>Build</span><span className='text-gray-600'>+commit</span></>);
+                                            })()}
                                         </span>
                                         <span className='block text-gray-500 text-[10px] mt-1'>
                                             {(() => {
@@ -871,127 +928,208 @@ export default function ResultPage() {
                     )}
                 </div>
 
+                {analyticsData.isReviewed && analyticsData.adminVerdict && analyticsData.adminVerdict !== 'None' && (
+                    <div className={`mb-8 bg-slate-800/50 backdrop-blur-sm border-2 rounded-xl p-6 ${
+                        analyticsData.adminVerdict === 'Malware' || analyticsData.adminVerdict === 'TakenDown'
+                            ? 'border-red-500/50 bg-red-900/20'
+                            : analyticsData.adminVerdict === 'Suspicious' || analyticsData.adminVerdict === 'PUP'
+                              ? 'border-orange-500/50 bg-orange-900/20'
+                              : analyticsData.adminVerdict === 'Clean' || analyticsData.adminVerdict === 'FalsePositive'
+                                ? 'border-green-500/50 bg-green-900/20'
+                                : 'border-purple-500/50'
+                    }`}>
+                        <div className='flex items-start gap-4'>
+                            <div className='text-3xl flex-shrink-0'>
+                                {analyticsData.adminVerdict === 'Malware' || analyticsData.adminVerdict === 'TakenDown'
+                                    ? '🛡️'
+                                    : analyticsData.adminVerdict === 'Suspicious' || analyticsData.adminVerdict === 'PUP'
+                                      ? '⚠️'
+                                      : analyticsData.adminVerdict === 'Clean' || analyticsData.adminVerdict === 'FalsePositive'
+                                        ? '✅'
+                                        : '📋'}
+                            </div>
+                            <div className='flex-1'>
+                                <div className='flex items-center gap-2 mb-2'>
+                                    <h3 className='text-lg font-bold text-white'>
+                                        {t('results.adminReview.title')}
+                                    </h3>
+                                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
+                                        analyticsData.adminVerdict === 'Malware' || analyticsData.adminVerdict === 'TakenDown'
+                                            ? 'bg-red-500/30 text-red-300'
+                                            : analyticsData.adminVerdict === 'Suspicious' || analyticsData.adminVerdict === 'PUP'
+                                              ? 'bg-orange-500/30 text-orange-300'
+                                              : analyticsData.adminVerdict === 'Clean' || analyticsData.adminVerdict === 'FalsePositive'
+                                                ? 'bg-green-500/30 text-green-300'
+                                                : 'bg-purple-500/30 text-purple-300'
+                                    }`}>
+                                        {getVerdictLabel(analyticsData.adminVerdict)}
+                                    </span>
+                                </div>
+                                <p className={`text-sm mb-2 ${
+                                    analyticsData.adminVerdict === 'Malware' || analyticsData.adminVerdict === 'TakenDown'
+                                        ? 'text-red-300'
+                                        : analyticsData.adminVerdict === 'Suspicious' || analyticsData.adminVerdict === 'PUP'
+                                          ? 'text-orange-300'
+                                          : analyticsData.adminVerdict === 'Clean' || analyticsData.adminVerdict === 'FalsePositive'
+                                            ? 'text-green-300'
+                                            : 'text-gray-300'
+                                }`}>
+                                    {analyticsData.adminVerdict === 'Malware' && t('results.adminReview.malwareDesc')}
+                                    {analyticsData.adminVerdict === 'TakenDown' && t('results.adminReview.takenDownDesc')}
+                                    {analyticsData.adminVerdict === 'Suspicious' && t('results.adminReview.suspiciousDesc')}
+                                    {analyticsData.adminVerdict === 'PUP' && t('results.adminReview.pupDesc')}
+                                    {analyticsData.adminVerdict === 'Clean' && t('results.adminReview.cleanDesc')}
+                                    {analyticsData.adminVerdict === 'FalsePositive' && t('results.adminReview.falsePositiveDesc')}
+                                </p>
+                                {analyticsData.adminMessage && (
+                                    <div className='mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700/50'>
+                                        <p className='text-xs text-gray-400 mb-1'>{t('results.adminReview.moderatorNote')}</p>
+                                        <p className='text-sm text-white'>{analyticsData.adminMessage}</p>
+                                    </div>
+                                )}
+                                {analyticsData.adminReviewedAt && (
+                                    <p className='text-xs text-gray-500 mt-3'>
+                                        {t('results.adminReview.reviewedOn')}{' '}
+                                        {new Date(analyticsData.adminReviewedAt).toLocaleDateString(undefined, {
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className='bg-slate-800/50 backdrop-blur-sm border border-purple-500/30 rounded-xl p-6'>
                     <h2 className='text-xl font-bold mb-6'>{t('results.analysisResults')}</h2>
 
-                    <div
-                        className={`mb-6 p-4 rounded-lg border-2 ${
-                            analyticsData.score >= 75
-                                ? 'bg-red-900/20 border-red-500/50'
-                                : analyticsData.score >= 50
-                                  ? 'bg-orange-900/20 border-orange-500/50'
-                                  : analyticsData.score >= 25
-                                    ? 'bg-yellow-900/20 border-yellow-500/50'
-                                    : 'bg-green-900/20 border-green-500/50'
-                        }`}
-                    >
-                        <div className='flex items-start gap-3'>
-                            <div className='text-2xl flex-shrink-0'>
-                                {analyticsData.score >= 75
-                                    ? '🚨'
-                                    : analyticsData.score >= 50
-                                      ? '⚠️'
-                                      : analyticsData.score >= 25
-                                        ? '⚡'
-                                        : '✅'}
-                            </div>
-                            <div className='flex-1'>
-                                <h3
-                                    className={`font-bold text-lg mb-2 ${
-                                        analyticsData.score >= 75
-                                            ? 'text-red-400'
-                                            : analyticsData.score >= 50
-                                              ? 'text-orange-400'
-                                              : analyticsData.score >= 25
-                                                ? 'text-yellow-400'
-                                                : 'text-green-400'
-                                    }`}
-                                >
-                                    {analyticsData.score >= 75
-                                        ? t('risk.highRiskDetected')
-                                        : analyticsData.score >= 50
-                                          ? t('risk.moderateRiskDetected')
-                                          : analyticsData.score >= 25
-                                            ? t('risk.lowRiskDetected')
-                                            : t('risk.fileAppearsSafe')}
-                                </h3>
-                                <p className='text-gray-300 text-sm mb-3'>
-                                    {analyticsData.score >= 75
-                                        ? t('risk.highRiskDescription')
-                                        : analyticsData.score >= 50
-                                          ? t('risk.moderateRiskDescription')
-                                          : analyticsData.score >= 25
-                                            ? t('risk.lowRiskDescription')
-                                            : t('risk.safeDescription')}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className='bg-slate-900/50 rounded-lg p-4'>
-                        <h3 className='font-semibold mb-3 text-white flex items-center gap-2'>
-                            <svg
-                                className='w-5 h-5 text-blue-400'
-                                fill='none'
-                                stroke='currentColor'
-                                viewBox='0 0 24 24'
+                    {(() => {
+                        const riskLevel = getEffectiveRiskLevel(analyticsData.score, analyticsData.adminVerdict);
+                        const isAdminOverride = analyticsData.adminVerdict && analyticsData.adminVerdict !== 'None';
+                        return (
+                            <div
+                                className={`mb-6 p-4 rounded-lg border-2 ${getRiskBgClass(riskLevel)}`}
                             >
-                                <path
-                                    strokeLinecap='round'
-                                    strokeLinejoin='round'
-                                    strokeWidth={2}
-                                    d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
-                                />
-                            </svg>
-                            {t('risk.recommendations')}
-                        </h3>
-                        <div className='space-y-2 text-sm text-gray-300'>
-                            {analyticsData.score >= 75 ? (
-                                <>
-                                    <p className='text-red-400 font-semibold mb-2'>
-                                        ⛔ {t('risk.doNotUse')}
-                                    </p>
-                                    <ul className='space-y-1 ml-4 text-sm'>
-                                        <li>• {t('risk.deleteFile')}</li>
-                                        <li>• {t('risk.scanSystem')}</li>
-                                        <li>• {t('risk.reportSource')}</li>
-                                    </ul>
-                                </>
-                            ) : analyticsData.score >= 50 ? (
-                                <>
-                                    <p className='text-orange-400 font-semibold mb-2'>
-                                        ⚠️ {t('risk.useCaution')}
-                                    </p>
-                                    <ul className='space-y-1 ml-4 text-sm'>
-                                        <li>• {t('risk.onlyIfTrust')}</li>
-                                        <li>• {t('risk.testSandbox')}</li>
-                                        <li>• {t('risk.monitorBehavior')}</li>
-                                    </ul>
-                                </>
-                            ) : analyticsData.score >= 25 ? (
-                                <>
-                                    <p className='text-yellow-400 font-semibold mb-2'>
-                                        ⚡ {t('risk.reviewBeforeUse')}
-                                    </p>
-                                    <ul className='space-y-1 ml-4 text-sm'>
-                                        <li>• {t('risk.verifySource')}</li>
-                                        <li>• {t('risk.checkPermissions')}</li>
-                                        <li>• {t('risk.keepBackups')}</li>
-                                    </ul>
-                                </>
-                            ) : (
-                                <>
-                                    <p className='text-green-400 font-semibold mb-2'>
-                                        ✅ {t('risk.safeToUse')}
-                                    </p>
-                                    <ul className='space-y-1 ml-4 text-sm'>
-                                        <li>• {t('risk.passedChecks')}</li>
-                                        <li>• {t('risk.downloadTrusted')}</li>
-                                    </ul>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                                <div className='flex items-start gap-3'>
+                                    <div className='text-2xl flex-shrink-0'>
+                                        {riskLevel === RiskLevel.HIGH
+                                            ? '🚨'
+                                            : riskLevel === RiskLevel.MODERATE
+                                              ? '⚠️'
+                                              : riskLevel === RiskLevel.LOW
+                                                ? '⚡'
+                                                : '✅'}
+                                    </div>
+                                    <div className='flex-1'>
+                                        <h3
+                                            className={`font-bold text-lg mb-2 ${
+                                                riskLevel === RiskLevel.HIGH
+                                                    ? 'text-red-400'
+                                                    : riskLevel === RiskLevel.MODERATE
+                                                      ? 'text-orange-400'
+                                                      : riskLevel === RiskLevel.LOW
+                                                        ? 'text-yellow-400'
+                                                        : 'text-green-400'
+                                            }`}
+                                        >
+                                            {riskLevel === RiskLevel.HIGH
+                                                ? t('risk.highRiskDetected')
+                                                : riskLevel === RiskLevel.MODERATE
+                                                  ? t('risk.moderateRiskDetected')
+                                                  : riskLevel === RiskLevel.LOW
+                                                    ? t('risk.lowRiskDetected')
+                                                    : t('risk.fileAppearsSafe')}
+                                        </h3>
+                                        <p className='text-gray-300 text-sm mb-3'>
+                                            {isAdminOverride
+                                                ? t('risk.verdictOverrideDescription')
+                                                : riskLevel === RiskLevel.HIGH
+                                                  ? t('risk.highRiskDescription')
+                                                  : riskLevel === RiskLevel.MODERATE
+                                                    ? t('risk.moderateRiskDescription')
+                                                    : riskLevel === RiskLevel.LOW
+                                                      ? t('risk.lowRiskDescription')
+                                                      : t('risk.safeDescription')}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {(() => {
+                        const riskLevel = getEffectiveRiskLevel(analyticsData.score, analyticsData.adminVerdict);
+                        return (
+                            <div className='bg-slate-900/50 rounded-lg p-4'>
+                                <h3 className='font-semibold mb-3 text-white flex items-center gap-2'>
+                                    <svg
+                                        className='w-5 h-5 text-blue-400'
+                                        fill='none'
+                                        stroke='currentColor'
+                                        viewBox='0 0 24 24'
+                                    >
+                                        <path
+                                            strokeLinecap='round'
+                                            strokeLinejoin='round'
+                                            strokeWidth={2}
+                                            d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+                                        />
+                                    </svg>
+                                    {t('risk.recommendations')}
+                                </h3>
+                                <div className='space-y-2 text-sm text-gray-300'>
+                                    {riskLevel === RiskLevel.HIGH ? (
+                                        <>
+                                            <p className='text-red-400 font-semibold mb-2'>
+                                                ⛔ {t('risk.doNotUse')}
+                                            </p>
+                                            <ul className='space-y-1 ml-4 text-sm'>
+                                                <li>• {t('risk.deleteFile')}</li>
+                                                <li>• {t('risk.scanSystem')}</li>
+                                                <li>• {t('risk.reportSource')}</li>
+                                            </ul>
+                                        </>
+                                    ) : riskLevel === RiskLevel.MODERATE ? (
+                                        <>
+                                            <p className='text-orange-400 font-semibold mb-2'>
+                                                ⚠️ {t('risk.useCaution')}
+                                            </p>
+                                            <ul className='space-y-1 ml-4 text-sm'>
+                                                <li>• {t('risk.onlyIfTrust')}</li>
+                                                <li>• {t('risk.testSandbox')}</li>
+                                                <li>• {t('risk.monitorBehavior')}</li>
+                                            </ul>
+                                        </>
+                                    ) : riskLevel === RiskLevel.LOW ? (
+                                        <>
+                                            <p className='text-yellow-400 font-semibold mb-2'>
+                                                ⚡ {t('risk.reviewBeforeUse')}
+                                            </p>
+                                            <ul className='space-y-1 ml-4 text-sm'>
+                                                <li>• {t('risk.verifySource')}</li>
+                                                <li>• {t('risk.checkPermissions')}</li>
+                                                <li>• {t('risk.keepBackups')}</li>
+                                            </ul>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className='text-green-400 font-semibold mb-2'>
+                                                ✅ {t('risk.safeToUse')}
+                                            </p>
+                                            <ul className='space-y-1 ml-4 text-sm'>
+                                                <li>• {t('risk.passedChecks')}</li>
+                                                <li>• {t('risk.downloadTrusted')}</li>
+                                            </ul>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     <div className='mt-8 bg-slate-900/50 rounded-lg border border-purple-500/30 p-6'>
                         <h3 className='text-xl font-bold text-white mb-4 flex items-center gap-2'>
@@ -1011,52 +1149,93 @@ export default function ResultPage() {
                             {t('results.securityAnalysis.detectionEngine')}
                         </h3>
                         <p className='text-gray-400 text-sm mb-4'>
-                            {analyticsData.checked && analyticsData.checked.length > 0
-                                ? `${analyticsData.checked.length} ${analyticsData.checked.length === 1 ? t('results.securityAnalysis.detectionsFound') : t('results.securityAnalysis.detectionsFoundPlural')}`
+                            {analyticsData.score > 0
+                                ? t('results.securityAnalysis.detectionsFoundGeneric')
                                 : t('results.securityAnalysis.noDetections')}
                         </p>
 
-                        <div className='max-w-md'>
-                            <div
-                                className={`border rounded-lg p-4 ${
-                                    analyticsData.checked && analyticsData.checked.length > 0
-                                        ? 'border-red-500/50 bg-red-900/20'
-                                        : 'border-green-500/50 bg-green-900/20'
-                                }`}
-                            >
-                                <div className='flex items-center justify-between mb-2'>
-                                    <div className='flex items-center gap-2'>
-                                        <svg
-                                            className='w-5 h-5 text-purple-400'
-                                            fill='none'
-                                            stroke='currentColor'
-                                            viewBox='0 0 24 24'
-                                        >
-                                            <path
-                                                strokeLinecap='round'
-                                                strokeLinejoin='round'
-                                                strokeWidth={2}
-                                                d='M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4'
-                                            />
-                                        </svg>
-                                        <span className='font-medium text-white'>
-                                            {t('results.securityAnalysis.blacklistedCommands')}
-                                        </span>
+                        <div className='space-y-3'>
+                            {(analyticsData.features && analyticsData.features.length > 0
+                                ? analyticsData.features
+                                : [{ name: 'BlacklistedCommands', score: 0, messages: undefined }]
+                            ).map((feature: FeatureResult) => {
+                                const featureKey = feature.name.charAt(0).toLowerCase() + feature.name.slice(1);
+                                const featureIcons: Record<string, string> = {
+                                    blacklistedCommands: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
+                                    networkActivity: 'M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+                                };
+                                const iconPath = featureIcons[featureKey] || featureIcons.blacklistedCommands;
+                                const hasDetections = feature.score > 0;
+                                const hasMessages = feature.messages && feature.messages.length > 0;
+
+                                return (
+                                    <div
+                                        key={feature.name}
+                                        className={`border rounded-lg overflow-hidden ${
+                                            hasDetections
+                                                ? 'border-red-500/50 bg-red-900/20'
+                                                : 'border-green-500/50 bg-green-900/20'
+                                        }`}
+                                    >
+                                        <div className='p-4'>
+                                            <div className='flex items-center justify-between mb-2'>
+                                                <div className='flex items-center gap-2'>
+                                                    <svg
+                                                        className='w-5 h-5 text-purple-400'
+                                                        fill='none'
+                                                        stroke='currentColor'
+                                                        viewBox='0 0 24 24'
+                                                    >
+                                                        <path
+                                                            strokeLinecap='round'
+                                                            strokeLinejoin='round'
+                                                            strokeWidth={2}
+                                                            d={iconPath}
+                                                        />
+                                                    </svg>
+                                                    <span className='font-medium text-white'>
+                                                        {t(`results.securityAnalysis.${featureKey}`)}
+                                                    </span>
+                                                    {hasDetections && (
+                                                        <span className='text-xs px-2 py-0.5 bg-red-500/30 text-red-300 rounded-full'>
+                                                            +{feature.score}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {hasDetections ? (
+                                                    <span className='text-red-400 text-sm font-semibold'>
+                                                        {t('results.securityAnalysis.detected')}
+                                                    </span>
+                                                ) : (
+                                                    <span className='text-green-400 text-sm font-semibold'>
+                                                        {t('results.securityAnalysis.clean')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className='text-xs text-gray-400'>
+                                                {t(`results.securityAnalysis.${featureKey}Desc`)}
+                                            </p>
+                                        </div>
+                                        {hasMessages && (
+                                            <details className='border-t border-slate-700/50'>
+                                                <summary className='px-4 py-2 text-xs text-purple-400 cursor-pointer hover:bg-slate-800/30 select-none flex items-center gap-1'>
+                                                    <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                                                    </svg>
+                                                    {t('results.securityAnalysis.viewDetails')} ({feature.messages!.length})
+                                                </summary>
+                                                <div className='px-4 py-3 bg-slate-950/50 space-y-2'>
+                                                    {feature.messages!.map((msg, idx) => (
+                                                        <div key={idx} className='text-xs text-gray-400 font-mono p-2 bg-slate-900/50 rounded border border-slate-700/50'>
+                                                            {msg}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </details>
+                                        )}
                                     </div>
-                                    {analyticsData.checked && analyticsData.checked.length > 0 ? (
-                                        <span className='text-red-400 text-sm font-semibold'>
-                                            ⚠️ {t('results.securityAnalysis.detected')}
-                                        </span>
-                                    ) : (
-                                        <span className='text-green-400 text-sm font-semibold'>
-                                            ✓ {t('results.securityAnalysis.clean')}
-                                        </span>
-                                    )}
-                                </div>
-                                <p className='text-xs text-gray-400'>
-                                    {t('results.securityAnalysis.blacklistedCommandsDesc')}
-                                </p>
-                            </div>
+                                );
+                            })}
                         </div>
 
                         <div className='mt-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg'>
@@ -1078,155 +1257,6 @@ export default function ResultPage() {
                             </p>
                         </div>
                     </div>
-
-                    {analyticsData.checked && analyticsData.checked.length > 0 && (
-                        <div className='mt-8 bg-slate-900/50 rounded-lg overflow-hidden border border-purple-500/30'>
-                            <button
-                                onClick={() =>
-                                    setSecurityAnalysisExpanded(!securityAnalysisExpanded)
-                                }
-                                className='w-full px-6 py-4 flex items-center justify-between hover:bg-slate-800/50 transition-colors'
-                            >
-                                <div className='flex items-center gap-3'>
-                                    <svg
-                                        className='w-6 h-6 text-purple-400'
-                                        fill='none'
-                                        stroke='currentColor'
-                                        viewBox='0 0 24 24'
-                                    >
-                                        <path
-                                            strokeLinecap='round'
-                                            strokeLinejoin='round'
-                                            strokeWidth={2}
-                                            d='M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z'
-                                        />
-                                    </svg>
-                                    <div className='text-left'>
-                                        <h3 className='text-xl font-bold text-white'>
-                                            {t('results.securityAnalysis.title')}
-                                        </h3>
-                                        <p className='text-sm text-gray-400'>
-                                            {analyticsData.checked.length}{' '}
-                                            {analyticsData.checked.length === 1
-                                                ? t('results.securityAnalysis.securityCheck')
-                                                : t('results.securityAnalysis.securityChecks')}{' '}
-                                            {t('results.securityAnalysis.checksDetected')}
-                                        </p>
-                                    </div>
-                                </div>
-                                <svg
-                                    className={`w-5 h-5 text-gray-400 transition-transform ${securityAnalysisExpanded ? 'rotate-180' : ''}`}
-                                    fill='none'
-                                    stroke='currentColor'
-                                    viewBox='0 0 24 24'
-                                >
-                                    <path
-                                        strokeLinecap='round'
-                                        strokeLinejoin='round'
-                                        strokeWidth={2}
-                                        d='M19 9l-7 7-7-7'
-                                    />
-                                </svg>
-                            </button>
-
-                            {securityAnalysisExpanded && (
-                                <div className='px-6 pb-6 space-y-3'>
-                                    {analyticsData.checked.map((item, index) => {
-                                        const checkInfo = getSecurityCheckInfo(item);
-                                        const severityColors = {
-                                            high: 'border-red-500/50 bg-red-900/20',
-                                            medium: 'border-yellow-500/50 bg-yellow-900/20',
-                                            low: 'border-blue-500/50 bg-blue-900/20',
-                                        };
-                                        const severityTextColors = {
-                                            high: 'text-red-400',
-                                            medium: 'text-yellow-400',
-                                            low: 'text-blue-400',
-                                        };
-                                        const severityBadgeColors = {
-                                            high: 'bg-red-500/20 text-red-300 border-red-500/30',
-                                            medium: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-                                            low: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-                                        };
-
-                                        return (
-                                            <div
-                                                key={index}
-                                                className={`border rounded-lg p-4 ${severityColors[checkInfo.severity]} hover:bg-opacity-30 transition-all`}
-                                            >
-                                                <div className='flex items-start gap-3'>
-                                                    <div className='text-2xl flex-shrink-0'>
-                                                        {checkInfo.icon}
-                                                    </div>
-                                                    <div className='flex-1 min-w-0'>
-                                                        <div className='flex items-start justify-between gap-2 mb-2'>
-                                                            <h4
-                                                                className={`font-semibold text-base ${severityTextColors[checkInfo.severity]}`}
-                                                            >
-                                                                {checkInfo.name}
-                                                            </h4>
-                                                            <span
-                                                                className={`px-2 py-1 text-xs font-medium rounded-full border flex-shrink-0 ${severityBadgeColors[checkInfo.severity]}`}
-                                                            >
-                                                                {checkInfo.severity === 'high'
-                                                                    ? t(
-                                                                          'results.securityAnalysis.highRisk'
-                                                                      )
-                                                                    : checkInfo.severity ===
-                                                                        'medium'
-                                                                      ? t(
-                                                                            'results.securityAnalysis.mediumRisk'
-                                                                        )
-                                                                      : t(
-                                                                            'results.securityAnalysis.lowRisk'
-                                                                        )}
-                                                            </span>
-                                                        </div>
-                                                        <p className='text-sm text-gray-300 mb-2'>
-                                                            {checkInfo.description}
-                                                        </p>
-                                                        <details className='mt-2'>
-                                                            <summary className='text-xs text-purple-400 cursor-pointer hover:text-purple-300 select-none'>
-                                                                {t(
-                                                                    'results.securityAnalysis.technicalDetails'
-                                                                )}
-                                                            </summary>
-                                                            <div className='mt-2 p-2 bg-slate-950/50 rounded border border-slate-700'>
-                                                                <code className='text-xs text-gray-400 font-mono break-all'>
-                                                                    {item}
-                                                                </code>
-                                                            </div>
-                                                        </details>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-
-                                    <div className='mt-4 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg'>
-                                        <div className='flex items-start gap-2'>
-                                            <svg
-                                                className='w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5'
-                                                fill='none'
-                                                stroke='currentColor'
-                                                viewBox='0 0 24 24'
-                                            >
-                                                <path
-                                                    strokeLinecap='round'
-                                                    strokeLinejoin='round'
-                                                    strokeWidth={2}
-                                                    d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
-                                                />
-                                            </svg>
-                                            <div className='text-sm text-blue-300'>
-                                                {t('results.securityAnalysis.detectionsNote')}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
 
                     <div className='mt-6 pt-6 border-t border-purple-500/30'>
                         <div className='text-center'>

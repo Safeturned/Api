@@ -53,6 +53,7 @@ export interface User {
     avatarUrl?: string;
     tier: number;
     isAdmin: boolean;
+    permissions: number;
     linkedIdentities?: LinkedIdentity[];
 }
 

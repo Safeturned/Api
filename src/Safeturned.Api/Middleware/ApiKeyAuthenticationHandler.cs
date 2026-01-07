@@ -130,10 +130,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
                 claims.Add(new Claim(ClaimTypes.Email, validatedKey.User.Email));
             }
 
-            if (validatedKey.User.IsAdmin)
-            {
-                claims.Add(new Claim(AuthConstants.IsAdminClaim, "true"));
-            }
+            claims.Add(new Claim(AuthConstants.PermissionsClaim, ((int)validatedKey.User.Permissions).ToString()));
         }
 
         var identity = new ClaimsIdentity(claims, Scheme.Name);

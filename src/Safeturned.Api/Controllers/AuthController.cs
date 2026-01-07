@@ -271,7 +271,8 @@ public class AuthController : ControllerBase
                 username = user.Username,
                 avatarUrl = user.AvatarUrl,
                 tier = (int)user.Tier,
-                isAdmin = user.IsAdmin,
+                isAdmin = user.IsAdministrator,
+                permissions = (int)user.Permissions,
                 linkedIdentities = identities,
                 returnUrl = ExtractReturnUrlFromState(request.State)
             });
@@ -386,7 +387,8 @@ public class AuthController : ControllerBase
                 username = user.Username,
                 avatarUrl = user.AvatarUrl,
                 tier = (int)user.Tier,
-                isAdmin = user.IsAdmin,
+                isAdmin = user.IsAdministrator,
+                permissions = (int)user.Permissions,
                 linkedIdentities = identities,
                 returnUrl = ExtractReturnUrlFromState(request.State)
             });
@@ -467,7 +469,9 @@ public class AuthController : ControllerBase
 
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
         var tier = (int)User.GetTier();
-        var isAdmin = User.FindFirst(AuthConstants.IsAdminClaim)?.Value;
+        var isAdmin = UserPermissionHelper.IsAdministrator(User);
+        var permissionsClaim = User.FindFirst(AuthConstants.PermissionsClaim)?.Value;
+        var permissions = int.TryParse(permissionsClaim, out var p) ? p : 0;
 
         var identities = await GetUserIdentitiesAsync(userId);
 
@@ -478,7 +482,8 @@ public class AuthController : ControllerBase
             username = user.Username,
             avatarUrl = user.AvatarUrl,
             tier,
-            isAdmin = bool.Parse(isAdmin ?? "false"),
+            isAdmin,
+            permissions,
             linkedIdentities = identities
         });
     }

@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serverApiRequest, ServerApiError } from '@/lib/api-client-server';
 
+interface AnalysisResult {
+    fileHash?: string;
+    jobId?: string;
+    pollUrl?: string;
+    message?: string;
+    [key: string]: unknown;
+}
+
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -9,10 +17,25 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid sessionId' }, { status: 400 });
         }
 
-        const { data: result } = await serverApiRequest(request, 'files/upload/complete', {
-            method: 'POST',
-            body,
-        });
+        const { data: result, status } = await serverApiRequest<AnalysisResult>(
+            request,
+            'files/upload/complete',
+            {
+                method: 'POST',
+                body,
+            }
+        );
+
+        if (status === 202 && result.jobId) {
+            return NextResponse.json(
+                {
+                    pending: true,
+                    jobId: result.jobId,
+                    message: result.message || 'Analysis in progress',
+                },
+                { status: 202 }
+            );
+        }
 
         return NextResponse.json(result);
     } catch (error) {

@@ -1,7 +1,15 @@
 import { AUTH_HEADERS, AUTH_STORAGE_KEYS, AUTH_EVENTS } from './auth-constants';
-import { API_VERSION } from './apiConfig';
+import { API_VERSION, API_VERSION_V2 } from './apiConfig';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
+function getVersionForEndpoint(endpoint: string): string {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+    if (cleanEndpoint.startsWith('files') && !cleanEndpoint.startsWith('files/jobs')) {
+        return API_VERSION_V2;
+    }
+    return API_VERSION;
+}
 
 export function getApiUrl(endpoint: string): string {
     if (endpoint.startsWith('/api/')) {
@@ -15,7 +23,8 @@ export function getApiUrl(endpoint: string): string {
     }
 
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
-    return `${API_BASE_URL}/${API_VERSION}/${cleanEndpoint}`;
+    const version = getVersionForEndpoint(cleanEndpoint);
+    return `${API_BASE_URL}/${version}/${cleanEndpoint}`;
 }
 
 export function getApiBaseUrl(): string {
@@ -165,3 +174,55 @@ export const api = {
         options?: { token?: string; headers?: HeadersInit; signal?: AbortSignal }
     ) => apiRequest<T>(endpoint, { method: 'PATCH', body, ...options }),
 };
+
+interface PendingUploadResponse {
+    pending?: boolean;
+    jobId?: string;
+    message?: string;
+}
+
+interface JobStatusResponse {
+    jobId: string;
+    status: string;
+    result?: Record<string, unknown>;
+    error?: string;
+    completed: boolean;
+}
+
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLL_ATTEMPTS = 90;
+
+export async function pollJobUntilComplete<T = Record<string, unknown>>(
+    jobId: string,
+    signal?: AbortSignal
+): Promise<T> {
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+        if (signal?.aborted) {
+            throw new Error('Upload cancelled');
+        }
+
+        const response = await api.get<JobStatusResponse>(`/api/files/jobs/${jobId}`, { signal });
+
+        if (response.completed) {
+            if (response.error) {
+                throw new Error(response.error);
+            }
+            return (response.result ?? {}) as T;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+
+    throw new Error('Analysis timed out. Please try again later.');
+}
+
+export function isPendingResponse(response: unknown): response is PendingUploadResponse {
+    return (
+        typeof response === 'object' &&
+        response !== null &&
+        'pending' in response &&
+        (response as PendingUploadResponse).pending === true &&
+        'jobId' in response &&
+        typeof (response as PendingUploadResponse).jobId === 'string'
+    );
+}

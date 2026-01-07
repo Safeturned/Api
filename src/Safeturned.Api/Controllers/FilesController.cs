@@ -22,19 +22,24 @@ public class FilesController : ControllerBase
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IFileCheckingService _fileCheckingService;
     private readonly IAnalyticsService _analyticsService;
+    private readonly IAnalysisJobService _analysisJobService;
     private readonly ILogger _logger;
     private readonly IConfiguration _configuration;
+
+    private const int DefaultV1TimeoutSeconds = 30;
 
     public FilesController(
         IServiceScopeFactory serviceScopeFactory,
         IFileCheckingService fileCheckingService,
         IAnalyticsService analyticsService,
+        IAnalysisJobService analysisJobService,
         ILogger logger,
         IConfiguration configuration)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _fileCheckingService = fileCheckingService;
         _analyticsService = analyticsService;
+        _analysisJobService = analysisJobService;
         _logger = logger.ForContext<FilesController>();
         _configuration = configuration;
     }
@@ -53,233 +58,60 @@ public class FilesController : ControllerBase
             _logger.Information("Processing uploaded file: {FileName}, Size: {Size} bytes",
                 file.FileName, file.Length);
 
-            var scanStartTime = DateTime.UtcNow;
-
-            var fileHash = HashHelper.ComputeHash(file);
-
-            bool canProcess;
-            await using (var stream = file.OpenReadStream())
-            {
-                canProcess = await _fileCheckingService.CanProcessFileAsync(stream, cancellationToken);
-            }
-
-            if (!canProcess)
-            {
-                _logger.Warning("File {FileName} is not a valid .NET assembly", file.FileName);
-                return Ok(new FileCheckResponse(
-                    file.FileName,
-                    fileHash,
-                    0,
-                    false,
-                    ResponseMessageType.FileNotDotNetAssembly,
-                    DateTime.UtcNow,
-                    DateTime.UtcNow,
-                    file.Length,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null
-                ));
-            }
             var (userId, apiKeyId) = HttpContext.GetUserContext();
+            var clientIp = HttpContext.GetIPAddress();
+            var badgeToken = Request.Form["badgeToken"].FirstOrDefault();
 
-            await using var scope = _serviceScopeFactory.CreateAsyncScope();
-            var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+            await using var stream = file.OpenReadStream();
 
-            Guid? validUserId = null;
-            if (userId.HasValue)
+            var job = await _analysisJobService.CreateJobAsync(
+                stream,
+                file.FileName,
+                file.Length,
+                userId,
+                apiKeyId,
+                clientIp,
+                forceAnalyze,
+                badgeToken,
+                cancellationToken);
+
+            await _analysisJobService.EnqueueJobAsync(job, cancellationToken);
+
+            var timeoutSeconds = _configuration.GetValue("Analysis:V1TimeoutSeconds", DefaultV1TimeoutSeconds);
+            var timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
+            var completedJob = await _analysisJobService.WaitForCompletionAsync(job.Id, timeout, cancellationToken);
+
+            if (completedJob?.Status == AnalysisJobStatus.Completed)
             {
-                var userExists = await filesDb.Set<User>().AnyAsync(u => u.Id == userId.Value, cancellationToken);
-                if (userExists)
+                var result = _analysisJobService.DeserializeResult(completedJob.ResultJson);
+                if (result != null)
                 {
-                    validUserId = userId;
-                }
-                else
-                {
-                    _logger.Warning("User {UserId} from token does not exist in database, skipping user association", userId.Value);
+                    _logger.Information("File {FileName} processed successfully via job queue. JobId: {JobId}",
+                        file.FileName, job.Id);
+                    return Ok(result);
                 }
             }
 
-            var existingFile = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == fileHash, cancellationToken);
-            FileData fileData;
-            if (existingFile == null)
+            if (completedJob?.Status == AnalysisJobStatus.Failed)
             {
-                FileCheckResult processingContext;
-                await using (var checkStream = file.OpenReadStream())
+                _logger.Warning("File {FileName} analysis failed. JobId: {JobId}, Error: {Error}",
+                    file.FileName, job.Id, completedJob.ErrorMessage);
+                return StatusCode(500, new
                 {
-                    processingContext = await _fileCheckingService.CheckFileAsync(checkStream, cancellationToken);
-                }
-
-                var metadata = processingContext.Metadata;
-                fileData = new FileData
-                {
-                    Hash = fileHash,
-                    Score = (int)processingContext.Score,
-                    FileName = file.FileName,
-                    SizeBytes = file.Length,
-                    DetectedType = "Assembly",
-                    AddDateTime = DateTime.UtcNow,
-                    LastScanned = DateTime.UtcNow,
-                    TimesScanned = 1,
-                    UserId = validUserId,
-                    ApiKeyId = apiKeyId,
-                    AnalyzerVersion = processingContext.Version,
-                    AssemblyCompany = metadata?.Company,
-                    AssemblyProduct = metadata?.Product,
-                    AssemblyTitle = metadata?.Title,
-                    AssemblyGuid = metadata?.Guid,
-                    AssemblyCopyright = metadata?.Copyright
-                };
-
-                await filesDb.Set<FileData>().AddAsync(fileData, cancellationToken);
-                await filesDb.SaveChangesAsync(cancellationToken);
-
-                var badgeToken = Request.Form["badgeToken"].FirstOrDefault();
-                if (!string.IsNullOrEmpty(badgeToken) && validUserId.HasValue)
-                {
-                    var badges = await filesDb.Set<Badge>()
-                        .Where(b => b.UserId == validUserId.Value &&
-                                   b.RequireTokenForUpdate == true &&
-                                   b.UpdateToken != null)
-                        .ToListAsync(cancellationToken);
-
-                    foreach (var badge in badges)
-                    {
-                        if (BadgeTokenHelper.VerifyToken(badgeToken, badge.UpdateToken!, badge.UpdateSalt))
-                        {
-                            _logger.Information("Badge {BadgeId} auto-updating via token to hash {Hash}",
-                                badge.Id, fileData.Hash);
-                            badge.LinkedFileHash = fileData.Hash;
-                            badge.UpdatedAt = DateTime.UtcNow;
-                            badge.VersionUpdateCount++;
-                        }
-                    }
-
-                    if (badges.Any())
-                    {
-                        await filesDb.SaveChangesAsync(cancellationToken);
-                    }
-                }
-
-                var scanTime = DateTime.UtcNow - scanStartTime;
-                var isThreat = processingContext.Score >= 50;
-
-                await _analyticsService.RecordScanAsync(file.FileName, fileHash, processingContext.Score, isThreat, scanTime, validUserId, apiKeyId, cancellationToken);
-
-                _logger.Information("New file {FileName} processed successfully. Score: {Score}, Time: {ScanTime}ms",
-                    file.FileName, processingContext.Score, scanTime.TotalMilliseconds);
-
-                return Ok(new FileCheckResponse(
-                    file.FileName,
-                    fileData.Hash,
-                    processingContext.Score,
-                    true,
-                    ResponseMessageType.NewFileProcessedSuccessfully,
-                    DateTime.UtcNow,
-                    fileData.LastScanned,
-                    file.Length,
-                    fileData.AnalyzerVersion,
-                    null,
-                    fileData.AssemblyCompany,
-                    fileData.AssemblyProduct,
-                    fileData.AssemblyTitle,
-                    fileData.AssemblyGuid,
-                    fileData.AssemblyCopyright
-                ));
-            }
-            if (!forceAnalyze)
-            {
-                existingFile.TimesScanned++;
-                if (validUserId.HasValue && !existingFile.UserId.HasValue)
-                {
-                    existingFile.UserId = validUserId;
-                    existingFile.ApiKeyId = apiKeyId;
-                }
-
-                await filesDb.SaveChangesAsync(cancellationToken);
-
-                if (validUserId.HasValue)
-                {
-                    var scanTime = DateTime.UtcNow - scanStartTime;
-                    var isThreat = existingFile.Score >= 50;
-                    await _analyticsService.RecordScanAsync(existingFile.FileName ?? file.FileName, fileHash, existingFile.Score, isThreat, scanTime, validUserId, apiKeyId, cancellationToken);
-                }
-
-                _logger.Information("File {FileName} already exists. Returning existing record without re-analysis.",
-                    file.FileName);
-
-                return Ok(new FileCheckResponse(
-                    existingFile.FileName ?? file.FileName,
-                    existingFile.Hash,
-                    existingFile.Score,
-                    false,
-                    ResponseMessageType.FileAlreadyUploadedSkippedAnalysis,
-                    DateTime.UtcNow,
-                    existingFile.LastScanned,
-                    existingFile.SizeBytes,
-                    existingFile.AnalyzerVersion,
-                    null,
-                    existingFile.AssemblyCompany,
-                    existingFile.AssemblyProduct,
-                    existingFile.AssemblyTitle,
-                    existingFile.AssemblyGuid,
-                    existingFile.AssemblyCopyright
-                ));
+                    Message = "File analysis failed",
+                    JobId = job.Id,
+                    Error = completedJob.ErrorMessage
+                });
             }
 
-            FileCheckResult reProcessingContext;
-            await using (var checkStream = file.OpenReadStream())
-            {
-                reProcessingContext = await _fileCheckingService.CheckFileAsync(checkStream);
-            }
+            _logger.Information("File {FileName} analysis timed out after {Timeout}s. JobId: {JobId}",
+                file.FileName, timeoutSeconds, job.Id);
 
-            var reMetadata = reProcessingContext.Metadata;
-            existingFile.Score = (int)reProcessingContext.Score;
-            existingFile.FileName = file.FileName;
-            existingFile.SizeBytes = file.Length;
-            existingFile.LastScanned = DateTime.UtcNow;
-            existingFile.TimesScanned++;
-            existingFile.AnalyzerVersion = reProcessingContext.Version;
-            existingFile.AssemblyCompany = reMetadata?.Company;
-            existingFile.AssemblyProduct = reMetadata?.Product;
-            existingFile.AssemblyTitle = reMetadata?.Title;
-            existingFile.AssemblyGuid = reMetadata?.Guid;
-            existingFile.AssemblyCopyright = reMetadata?.Copyright;
-            if (validUserId.HasValue && !existingFile.UserId.HasValue)
-            {
-                existingFile.UserId = validUserId;
-                existingFile.ApiKeyId = apiKeyId;
-            }
-
-            await filesDb.SaveChangesAsync(cancellationToken);
-
-            var reScanTime = DateTime.UtcNow - scanStartTime;
-            var reIsThreat = reProcessingContext.Score >= 50;
-
-            await _analyticsService.RecordScanAsync(file.FileName, fileHash, reProcessingContext.Score, reIsThreat, reScanTime, validUserId, apiKeyId, cancellationToken);
-
-            _logger.Information("File {FileName} re-analyzed successfully. Score: {Score}, Time: {ScanTime}ms", file.FileName, reProcessingContext.Score, reScanTime.TotalMilliseconds);
-
-            return Ok(new FileCheckResponse(
-                existingFile.FileName,
-                existingFile.Hash,
-                reProcessingContext.Score,
-                true,
-                ResponseMessageType.FileReanalyzedSuccessfully,
-                DateTime.UtcNow,
-                existingFile.LastScanned,
-                existingFile.SizeBytes,
-                existingFile.AnalyzerVersion,
-                null,
-                existingFile.AssemblyCompany,
-                existingFile.AssemblyProduct,
-                existingFile.AssemblyTitle,
-                existingFile.AssemblyGuid,
-                existingFile.AssemblyCopyright
-            ));
+            return Accepted(new FileUploadAsyncFallbackResponse(
+                "Analysis is taking longer than expected. Use the job ID to check status.",
+                job.Id,
+                $"/v2/files/jobs/{job.Id}"));
         }
         catch (Exception ex)
         {
@@ -295,26 +127,54 @@ public class FilesController : ControllerBase
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
-            var fileData = await filesDb.Set<FileData>().AsNoTracking().FirstOrDefaultAsync(x => x.Hash == hash, cancellationToken);
+            var fileData = await filesDb.Set<FileData>()
+                .Include(f => f.AdminReviews)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Hash == hash, cancellationToken);
             if (fileData == null)
                 return NotFound($"File with hash {hash} not found.");
-            return Ok(new FileCheckResponse(
-                fileData.FileName ?? "Unknown",
-                fileData.Hash,
-                fileData.Score,
-                true,
-                ResponseMessageType.FileRetrievedFromDatabase,
-                default,
-                fileData.LastScanned,
-                fileData.SizeBytes,
-                fileData.AnalyzerVersion,
-                null,
-                fileData.AssemblyCompany,
-                fileData.AssemblyProduct,
-                fileData.AssemblyTitle,
-                fileData.AssemblyGuid,
-                fileData.AssemblyCopyright
-            ));
+
+            if (fileData.IsTakenDown)
+            {
+                var isModerator = UserPermissionHelper.HasPermissionFromClaims(User, UserPermission.ModerateFiles);
+
+                if (!isModerator)
+                {
+                    return NotFound(new
+                    {
+                        error = "This file has been taken down",
+                        publicMessage = fileData.PublicAdminMessage,
+                        takenDown = true
+                    });
+                }
+            }
+
+            var latestReview = fileData.AdminReviews?
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefault();
+
+            return Ok(new
+            {
+                FileName = fileData.FileName ?? "Unknown",
+                FileHash = fileData.Hash,
+                Score = fileData.Score,
+                MessageType = ResponseMessageType.FileRetrievedFromDatabase,
+                ProcessedAt = default(DateTime),
+                LastScanned = fileData.LastScanned,
+                FileSizeBytes = fileData.SizeBytes,
+                AnalyzerVersion = fileData.AnalyzerVersion,
+                Features = fileData.Features?.Select(f => new FeatureResultResponse(f.Name, f.Score, f.Messages?.Select(m => m.Text).ToList())).ToArray(),
+                AssemblyCompany = fileData.AssemblyCompany,
+                AssemblyProduct = fileData.AssemblyProduct,
+                AssemblyTitle = fileData.AssemblyTitle,
+                AssemblyGuid = fileData.AssemblyGuid,
+                AssemblyCopyright = fileData.AssemblyCopyright,
+                AdminVerdict = fileData.CurrentVerdict?.ToString(),
+                AdminMessage = fileData.PublicAdminMessage,
+                AdminReviewedAt = latestReview?.CreatedAt,
+                IsReviewed = fileData.CurrentVerdict.HasValue && fileData.CurrentVerdict != AdminVerdict.None,
+                IsTakenDown = fileData.IsTakenDown
+            });
         }
         catch (Exception ex)
         {

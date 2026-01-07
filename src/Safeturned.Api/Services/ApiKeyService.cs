@@ -40,14 +40,14 @@ public class ApiKeyService : IApiKeyService
 
         var isReservedWebsiteKey = name.Equals(ApiKeyConstants.WebsiteServiceName, StringComparison.OrdinalIgnoreCase);
 
-        if (isReservedWebsiteKey && !user.IsAdmin)
+        if (isReservedWebsiteKey && !user.IsAdministrator)
         {
             _logger.Warning("User {UserId} attempted to create reserved API key name {KeyName}", userId, name);
             throw new InvalidOperationException("This API key name is reserved.");
         }
 
         // Check API key limit for user's tier (admins bypass this limit)
-        if (!user.IsAdmin)
+        if (!user.IsAdministrator)
         {
             var activeKeyCount = await db.Set<ApiKey>().CountAsync(k => k.UserId == userId && k.IsActive);
             var maxKeys = TierConstants.GetMaxApiKeys(user.Tier);
@@ -286,7 +286,7 @@ public class ApiKeyService : IApiKeyService
             .CountAsync(k => k.UserId == userId && k.IsActive);
 
         // Admins have unlimited API keys (represented as 9999)
-        var maxKeys = user.IsAdmin ? 9999 : TierConstants.GetMaxApiKeys(user.Tier);
+        var maxKeys = user.IsAdministrator ? 9999 : TierConstants.GetMaxApiKeys(user.Tier);
 
         return (activeKeyCount, maxKeys);
     }

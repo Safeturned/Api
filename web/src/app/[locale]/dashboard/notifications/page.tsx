@@ -11,10 +11,12 @@ import LoadingPage from '@/components/LoadingPage';
 import { api } from '@/lib/api-client';
 import { STORAGE_KEYS } from '@/lib/storage-constants';
 import { useTranslation } from '@/hooks/useTranslation';
+import { encodeHashForUrl } from '@/lib/utils';
 
 interface RecentScan {
     id: string;
     fileName: string;
+    fileHash: string;
     score: number;
     isThreat: boolean;
     scanDate: string;
@@ -86,7 +88,7 @@ export default function NotificationsPage() {
                         title: t('notifications.threatDetected'),
                         message: `${scan.fileName} - Risk Score: ${scan.score}/100`,
                         timestamp: scan.scanDate,
-                        link: `/scan/${scan.id}`,
+                        link: `/result/${encodeHashForUrl(scan.fileHash)}`,
                         icon: '🚨',
                     };
                 } else {
@@ -96,7 +98,7 @@ export default function NotificationsPage() {
                         title: t('notifications.fileScannedSuccess'),
                         message: `${scan.fileName} - ${t('notifications.noThreatsDetected')} (Score: ${scan.score}/100)`,
                         timestamp: scan.scanDate,
-                        link: `/scan/${scan.id}`,
+                        link: `/result/${encodeHashForUrl(scan.fileHash)}`,
                         icon: '✅',
                     };
                 }

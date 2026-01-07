@@ -157,7 +157,7 @@ public class ApiKeyRateLimitMiddleware
         }
 
         var tier = context.User.GetTier();
-        var isAdmin = context.User.FindFirst(AuthConstants.IsAdminClaim)?.Value == "true";
+        var isAdmin = UserPermissionHelper.IsAdministrator(context.User);
         var rateLimit = isAdmin ? TierConstants.RateLimitAdmin : TierConstants.GetOperationRateLimit(tier, operationTier);
 
         if (tier == TierType.Bot && operationTier != RateLimitTier.Read)
@@ -308,7 +308,7 @@ public class ApiKeyRateLimitMiddleware
         }
 
         var tier = context.User.GetTier();
-        var isAdmin = context.User.FindFirst(AuthConstants.IsAdminClaim)?.Value == "true";
+        var isAdmin = UserPermissionHelper.IsAdministrator(context.User);
         var rateLimit = isAdmin ? TierConstants.RateLimitAdmin : TierConstants.GetOperationRateLimit(tier, operationTier);
 
         _logger.Debug("User {UserId} authenticated with tier {Tier}, operation {Operation}, limit: {RateLimit}/hour",

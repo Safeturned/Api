@@ -15,7 +15,7 @@ public class FileCheckingService(IFileCheckerClient fileCheckerClient, ILogger l
 
             var result = await fileCheckerClient.AnalyzeAsync(fileStream, cancellationToken);
 
-            _logger.Information("File check completed. Score: {Score}, Checked: {Checked}", result.Score, result.Checked);
+            _logger.Information("File check completed. Score: {Score}, Features: {FeatureCount}", result.Score, result.Features?.Length ?? 0);
             return result;
         }
         catch (OperationCanceledException)

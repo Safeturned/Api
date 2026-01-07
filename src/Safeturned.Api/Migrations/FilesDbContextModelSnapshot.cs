@@ -22,6 +22,88 @@ namespace Safeturned.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Safeturned.Api.Database.Models.AnalysisJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BadgeToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ClientIpAddress")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("ForceAnalyze")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("HangfireJobId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("TempFileCleanedUp")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TempFilePath")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("FileHash");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AnalysisJobs");
+                });
+
             modelBuilder.Entity("Safeturned.Api.Database.Models.ApiKey", b =>
                 {
                     b.Property<Guid>("Id")
@@ -264,6 +346,44 @@ namespace Safeturned.Api.Migrations
                     b.ToTable("Endpoints");
                 });
 
+            modelBuilder.Entity("Safeturned.Api.Database.Models.FileAdminReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("InternalNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PublicMessage")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ReviewerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Verdict")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("FileHash");
+
+                    b.HasIndex("ReviewerId");
+
+                    b.HasIndex("Verdict");
+
+                    b.ToTable("FileAdminReviews");
+                });
+
             modelBuilder.Entity("Safeturned.Api.Database.Models.FileData", b =>
                 {
                     b.Property<string>("Hash")
@@ -293,20 +413,38 @@ namespace Safeturned.Api.Migrations
                     b.Property<string>("AssemblyTitle")
                         .HasColumnType("text");
 
+                    b.Property<int?>("CurrentVerdict")
+                        .HasColumnType("integer");
+
                     b.Property<string>("DetectedType")
                         .HasColumnType("text");
 
                     b.Property<string>("FileName")
                         .HasColumnType("text");
 
+                    b.Property<bool>("IsTakenDown")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("LastScanned")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PublicAdminMessage")
+                        .HasColumnType("text");
 
                     b.Property<int>("Score")
                         .HasColumnType("integer");
 
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("TakedownReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("TakenDownAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TakenDownByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("TimesScanned")
                         .HasColumnType("integer");
@@ -319,6 +457,14 @@ namespace Safeturned.Api.Migrations
                     b.HasIndex("AddDateTime");
 
                     b.HasIndex("ApiKeyId");
+
+                    b.HasIndex("CurrentVerdict");
+
+                    b.HasIndex("IsTakenDown");
+
+                    b.HasIndex("TakenDownAt");
+
+                    b.HasIndex("TakenDownByUserId");
 
                     b.HasIndex("UserId");
 
@@ -608,11 +754,11 @@ namespace Safeturned.Api.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("IsAdmin")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Permissions")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Tier")
                         .HasColumnType("integer");
@@ -670,6 +816,21 @@ namespace Safeturned.Api.Migrations
                     b.ToTable("UserIdentities");
                 });
 
+            modelBuilder.Entity("Safeturned.Api.Database.Models.AnalysisJob", b =>
+                {
+                    b.HasOne("Safeturned.Api.Database.Models.ApiKey", "ApiKey")
+                        .WithMany()
+                        .HasForeignKey("ApiKeyId");
+
+                    b.HasOne("Safeturned.Api.Database.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId");
+
+                    b.Navigation("ApiKey");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Safeturned.Api.Database.Models.ApiKey", b =>
                 {
                     b.HasOne("Safeturned.Api.Database.Models.User", "User")
@@ -725,17 +886,94 @@ namespace Safeturned.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Safeturned.Api.Database.Models.FileAdminReview", b =>
+                {
+                    b.HasOne("Safeturned.Api.Database.Models.FileData", "File")
+                        .WithMany("AdminReviews")
+                        .HasForeignKey("FileHash")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Safeturned.Api.Database.Models.User", "Reviewer")
+                        .WithMany("FileReviews")
+                        .HasForeignKey("ReviewerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("File");
+
+                    b.Navigation("Reviewer");
+                });
+
             modelBuilder.Entity("Safeturned.Api.Database.Models.FileData", b =>
                 {
                     b.HasOne("Safeturned.Api.Database.Models.ApiKey", "ApiKey")
                         .WithMany()
                         .HasForeignKey("ApiKeyId");
 
+                    b.HasOne("Safeturned.Api.Database.Models.User", "TakenDownByUser")
+                        .WithMany()
+                        .HasForeignKey("TakenDownByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Safeturned.Api.Database.Models.User", "User")
                         .WithMany("ScannedFiles")
-                        .HasForeignKey("UserId");
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.OwnsMany("Safeturned.Api.Database.Models.StoredFeatureResult", "Features", b1 =>
+                        {
+                            b1.Property<string>("FileDataHash");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<int>("Id");
+
+                            b1.Property<string>("Name")
+                                .IsRequired();
+
+                            b1.Property<float>("Score");
+
+                            b1.HasKey("FileDataHash", "__synthesizedOrdinal");
+
+                            b1.ToTable("Files");
+
+                            b1.ToJson("Features");
+
+                            b1.WithOwner()
+                                .HasForeignKey("FileDataHash");
+
+                            b1.OwnsMany("Safeturned.Api.Database.Models.FeatureMessage", "Messages", b2 =>
+                                {
+                                    b2.Property<string>("StoredFeatureResultFileDataHash");
+
+                                    b2.Property<int>("StoredFeatureResult__synthesizedOrdinal");
+
+                                    b2.Property<int>("__synthesizedOrdinal")
+                                        .ValueGeneratedOnAdd();
+
+                                    b2.Property<int>("Id");
+
+                                    b2.Property<string>("Text")
+                                        .IsRequired();
+
+                                    b2.HasKey("StoredFeatureResultFileDataHash", "StoredFeatureResult__synthesizedOrdinal", "__synthesizedOrdinal");
+
+                                    b2.ToTable("Files");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("StoredFeatureResultFileDataHash", "StoredFeatureResult__synthesizedOrdinal");
+                                });
+
+                            b1.Navigation("Messages");
+                        });
 
                     b.Navigation("ApiKey");
+
+                    b.Navigation("Features");
+
+                    b.Navigation("TakenDownByUser");
 
                     b.Navigation("User");
                 });
@@ -782,9 +1020,16 @@ namespace Safeturned.Api.Migrations
                     b.Navigation("UsageRecords");
                 });
 
+            modelBuilder.Entity("Safeturned.Api.Database.Models.FileData", b =>
+                {
+                    b.Navigation("AdminReviews");
+                });
+
             modelBuilder.Entity("Safeturned.Api.Database.Models.User", b =>
                 {
                     b.Navigation("ApiKeys");
+
+                    b.Navigation("FileReviews");
 
                     b.Navigation("Identities");
 

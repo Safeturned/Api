@@ -10,6 +10,7 @@ public static class AuthConstants
     public const string ApiKeyIdClaim = "api_key_id";
     public const string ScopesClaim = "scopes";
     public const string IsAdminClaim = "is_admin";
+    public const string PermissionsClaim = "permissions";
     public const string UsernameClaim = "username";
     public const string AvatarUrlClaim = "avatar_url";
 

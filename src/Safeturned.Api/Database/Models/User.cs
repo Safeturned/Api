@@ -19,9 +19,19 @@ public class User
 
     public bool IsActive { get; set; } = true;
 
-    public bool IsAdmin { get; set; } = false;
+    public UserPermission Permissions { get; set; } = UserPermission.None;
+
+    public bool IsAdministrator => Permissions == UserPermission.Administrator;
+
+    public bool HasPermission(UserPermission permission)
+    {
+        if (IsAdministrator)
+            return true;
+        return (Permissions & permission) == permission;
+    }
 
     public ICollection<UserIdentity> Identities { get; set; } = new List<UserIdentity>();
+    public ICollection<FileAdminReview> FileReviews { get; set; } = new List<FileAdminReview>();
     public ICollection<ApiKey> ApiKeys { get; set; } = new List<ApiKey>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<FileData> ScannedFiles { get; set; } = new List<FileData>();

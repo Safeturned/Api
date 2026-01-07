@@ -30,10 +30,15 @@ services.AddSerilog((sp, lc) => lc
     .Enrich.FromLogContext()
     .WriteTo.Console());
 
+var appVersion = config.GetValue<string>("Parameters:AppVersion");
 SentrySdk.Init(options =>
 {
     var sentryConfig = config.GetRequiredSection("Sentry");
     sentryConfig.Bind(options);
+    if (!string.IsNullOrEmpty(appVersion))
+    {
+        options.Release = appVersion;
+    }
     options.AddExceptionFilterForType<OperationCanceledException>();
 });
 

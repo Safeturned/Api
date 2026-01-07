@@ -103,24 +103,23 @@ public class ApiKeysController : ControllerBase
             return BadRequest(new
             {
                 error = "API key limit reached",
-                message = ex.Message
+                message = "You have reached the maximum number of API keys allowed for your tier"
             });
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
         {
-            _logger.Warning("User {UserId} not found in database when creating API key", userId);
+            _logger.Warning(ex, "User {UserId} not found in database when creating API key", userId);
             return BadRequest(new
             {
                 error = "User session invalid",
-                message = "Your user account was not found. This can happen in development mode when the database is reset. Please logout and login again.",
-                details = ex.Message
+                message = "Your user account was not found. Please logout and login again."
             });
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "Unexpected error creating API key for user {UserId}", userId);
-            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Unexpected error creating API key"));
-            return StatusCode(500, new { error = "Failed to create API key", message = ex.Message });
+            SentrySdk.CaptureException(ex);
+            return StatusCode(500, new { error = "Failed to create API key" });
         }
     }
 

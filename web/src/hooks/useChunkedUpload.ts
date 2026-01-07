@@ -26,14 +26,32 @@ export interface ChunkedUploadOptions {
 const DEFAULT_CHUNK_SIZE = 50 * 1024 * 1024;
 const DEFAULT_MAX_RETRIES = 3;
 
-const MESSAGES = {
-    PREPARING: 'Preparing file...',
-    UPLOADING: 'Uploading...',
-    PROCESSING: 'Processing...',
-    COMPLETED: 'Upload completed',
-    CANCELLED: 'Upload cancelled',
-    ERROR: 'Upload failed',
+export const UPLOAD_STATUS_KEYS = {
+    PREPARING: 'upload.status.preparing',
+    UPLOADING: 'upload.status.uploading',
+    PROCESSING: 'upload.status.processing',
+    POLLING: 'upload.status.polling',
+    COMPLETED: 'upload.status.completed',
+    CANCELLED: 'upload.status.cancelled',
+    ERROR: 'upload.status.error',
 } as const;
+
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLL_ATTEMPTS = 90;
+
+interface PendingResponse {
+    pending: true;
+    jobId: string;
+    message?: string;
+}
+
+interface JobStatusResponse {
+    jobId: string;
+    status: string;
+    result?: Record<string, unknown>;
+    error?: string;
+    completed: boolean;
+}
 
 export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
     const {
@@ -84,7 +102,7 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
             totalBytes: number,
             currentChunk: number,
             totalChunks: number,
-            status: string = MESSAGES.UPLOADING
+            status: string = UPLOAD_STATUS_KEYS.UPLOADING
         ) => {
             const progress = (uploadedBytes / totalBytes) * 100;
             const elapsed = Date.now() - startTimeRef.current;
@@ -151,6 +169,35 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
         [maxRetries]
     );
 
+    const pollJobStatus = useCallback(
+        async (jobId: string): Promise<Record<string, unknown>> => {
+            setState(prev => ({ ...prev, status: UPLOAD_STATUS_KEYS.POLLING }));
+
+            for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+                if (abortControllerRef.current?.signal.aborted) {
+                    throw new Error(UPLOAD_STATUS_KEYS.CANCELLED);
+                }
+
+                const response = await api.get<JobStatusResponse>(
+                    `/api/files/jobs/${jobId}`,
+                    { signal: abortControllerRef.current?.signal }
+                );
+
+                if (response.completed) {
+                    if (response.error) {
+                        throw new Error(response.error);
+                    }
+                    return response.result ?? {};
+                }
+
+                await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+            }
+
+            throw new Error('Analysis timed out. Please try again later.');
+        },
+        []
+    );
+
     const initiateSession = useCallback(
         async (
             fileName: string,
@@ -212,7 +259,7 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
                 error: null,
                 speed: 0,
                 eta: 0,
-                status: MESSAGES.PREPARING,
+                status: UPLOAD_STATUS_KEYS.PREPARING,
                 isPreparing: true,
             }));
 
@@ -221,12 +268,12 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
             abortControllerRef.current = new AbortController();
 
             try {
-                setState(prev => ({ ...prev, status: MESSAGES.PREPARING, isPreparing: true }));
+                setState(prev => ({ ...prev, status: UPLOAD_STATUS_KEYS.PREPARING, isPreparing: true }));
 
                 const fileHash = await computeFileHash(file);
                 const totalChunks = Math.ceil(file.size / chunkSize);
 
-                setState(prev => ({ ...prev, status: MESSAGES.UPLOADING, isPreparing: false }));
+                setState(prev => ({ ...prev, status: UPLOAD_STATUS_KEYS.UPLOADING, isPreparing: false }));
 
                 const sessionId = await initiateSession(
                     file.name,
@@ -239,7 +286,7 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
 
                 for (let i = 0; i < totalChunks; i++) {
                     if (abortControllerRef.current?.signal.aborted) {
-                        throw new Error(MESSAGES.CANCELLED);
+                        throw new Error(UPLOAD_STATUS_KEYS.CANCELLED);
                     }
 
                     const start = i * chunkSize;
@@ -255,17 +302,26 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
                         file.size,
                         i + 1,
                         totalChunks,
-                        MESSAGES.UPLOADING
+                        UPLOAD_STATUS_KEYS.UPLOADING
                     );
                 }
 
-                setState(prev => ({ ...prev, status: MESSAGES.PROCESSING }));
+                setState(prev => ({ ...prev, status: UPLOAD_STATUS_KEYS.PROCESSING }));
 
-                const result = await api.post<Record<string, unknown>>(
+                const completeResponse = await api.post<Record<string, unknown> | PendingResponse>(
                     '/api/upload-chunked/complete',
                     { sessionId },
                     { signal: abortControllerRef.current.signal }
                 );
+
+                let result: Record<string, unknown>;
+
+                const pendingResponse = completeResponse as PendingResponse;
+                if (pendingResponse.pending && pendingResponse.jobId) {
+                    result = await pollJobStatus(pendingResponse.jobId);
+                } else {
+                    result = completeResponse as Record<string, unknown>;
+                }
 
                 isUploadingRef.current = false;
                 setState(prev => ({
@@ -273,7 +329,7 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
                     isUploading: false,
                     progress: 100,
                     error: null,
-                    status: MESSAGES.COMPLETED,
+                    status: UPLOAD_STATUS_KEYS.COMPLETED,
                 }));
 
                 onComplete?.(result);
@@ -290,9 +346,9 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
                             'Network error: Unable to connect to the server. Please check your internet connection.';
                     } else if (
                         error.name === 'AbortError' ||
-                        error.message === MESSAGES.CANCELLED
+                        error.message === UPLOAD_STATUS_KEYS.CANCELLED
                     ) {
-                        errorMessage = MESSAGES.CANCELLED;
+                        errorMessage = UPLOAD_STATUS_KEYS.CANCELLED;
                     } else {
                         errorMessage = error.message;
                     }
@@ -305,7 +361,7 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
                     ...prev,
                     isUploading: false,
                     error: errorMessage,
-                    status: MESSAGES.ERROR,
+                    status: UPLOAD_STATUS_KEYS.ERROR,
                 }));
 
                 onError?.(errorMessage);
@@ -321,6 +377,7 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
             onComplete,
             onError,
             initiateSession,
+            pollJobStatus,
         ]
     );
 
@@ -334,8 +391,8 @@ export function useChunkedUpload(options: ChunkedUploadOptions = {}) {
         setState(prev => ({
             ...prev,
             isUploading: false,
-            error: MESSAGES.CANCELLED,
-            status: MESSAGES.CANCELLED,
+            error: UPLOAD_STATUS_KEYS.CANCELLED,
+            status: UPLOAD_STATUS_KEYS.CANCELLED,
         }));
     }, []);
 

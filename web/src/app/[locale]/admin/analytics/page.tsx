@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
@@ -60,6 +60,17 @@ export default function AdminAnalyticsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const loadAnalytics = useCallback(async () => {
+        try {
+            const data = await api.get<SystemAnalytics>('admin/analytics/system');
+            setAnalytics(data);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : t('admin.analytics.failedToLoad'));
+        } finally {
+            setLoading(false);
+        }
+    }, [t]);
+
     useEffect(() => {
         if (!isLoading && (!isAuthenticated || !user?.isAdmin)) {
             router.push('/');
@@ -69,18 +80,7 @@ export default function AdminAnalyticsPage() {
         if (user?.isAdmin) {
             loadAnalytics();
         }
-    }, [user, isAuthenticated, isLoading, router]);
-
-    const loadAnalytics = async () => {
-        try {
-            const data = await api.get<SystemAnalytics>('admin/analytics/system');
-            setAnalytics(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : t('admin.analytics.failedToLoad'));
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [user, isAuthenticated, isLoading, router, loadAnalytics]);
 
     if (isLoading || loading) {
         return (

@@ -12,6 +12,15 @@ import Footer from '@/components/Footer';
 import BackToTop from '@/components/BackToTop';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { api } from '@/lib/api-client';
+import {
+    UserPermission,
+    PERMISSION_LABELS,
+    PERMISSION_COLORS,
+    hasPermission,
+    getPermissionFlags,
+    togglePermission,
+    isAdministrator,
+} from '@/lib/adminConstants';
 
 interface User {
     id: string;
@@ -22,6 +31,7 @@ interface User {
     tier: number;
     isAdmin: boolean;
     isActive: boolean;
+    permissions: number;
     createdAt: string;
     lastLoginAt: string | null;
     apiKeysCount: number;
@@ -100,6 +110,13 @@ export default function AdminUsersPage() {
     });
     const [createdBotKey, setCreatedBotKey] = useState<string | null>(null);
     const [botKeyError, setBotKeyError] = useState<string | null>(null);
+    const [showPermissionsModal, setShowPermissionsModal] = useState<{
+        show: boolean;
+        userId: string;
+        userName: string;
+        currentPermissions: number;
+    }>({ show: false, userId: '', userName: '', currentPermissions: 0 });
+    const [pendingPermissions, setPendingPermissions] = useState<number>(0);
 
     useEffect(() => {
         if (successMessage) {
@@ -251,6 +268,47 @@ export default function AdminUsersPage() {
             action,
             type: 'danger',
         });
+    };
+
+    const updateUserPermissions = async () => {
+        try {
+            setActionLoading(`permissions-${showPermissionsModal.userId}`);
+            await api.patch(`admin/users/${showPermissionsModal.userId}/permissions`, {
+                permissions: pendingPermissions,
+            });
+            await loadUsers();
+            setSuccessMessage(
+                t('admin.userManagement.permissionsUpdated', 'Permissions updated successfully')
+            );
+            setShowPermissionsModal({
+                show: false,
+                userId: '',
+                userName: '',
+                currentPermissions: 0,
+            });
+        } catch (err: unknown) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : (err as { data?: { error?: string } })?.data?.error ||
+                          t(
+                              'admin.userManagement.failedToUpdatePermissions',
+                              'Failed to update permissions'
+                          )
+            );
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const openPermissionsModal = (user: User) => {
+        setShowPermissionsModal({
+            show: true,
+            userId: user.id,
+            userName: user.username ?? user.email ?? 'Unknown',
+            currentPermissions: user.permissions,
+        });
+        setPendingPermissions(user.permissions);
     };
 
     const createBotApiKey = async () => {
@@ -471,6 +529,12 @@ export default function AdminUsersPage() {
                                                     Auth Provider
                                                 </th>
                                                 <th className='text-left p-4 text-gray-400 font-medium'>
+                                                    {t(
+                                                        'admin.userManagement.permissions',
+                                                        'Permissions'
+                                                    )}
+                                                </th>
+                                                <th className='text-left p-4 text-gray-400 font-medium'>
                                                     {t('admin.userManagement.activity')}
                                                 </th>
                                                 <th className='text-left p-4 text-gray-400 font-medium'>
@@ -583,6 +647,33 @@ export default function AdminUsersPage() {
                                                         )}
                                                     </td>
                                                     <td className='p-4'>
+                                                        <div className='flex flex-wrap gap-1'>
+                                                            {isAdministrator(u.permissions) ? (
+                                                                <span className='bg-yellow-600 text-white text-xs px-2 py-0.5 rounded'>
+                                                                    Administrator
+                                                                </span>
+                                                            ) : u.permissions === 0 ? (
+                                                                <span className='text-gray-500 text-xs italic'>
+                                                                    {t(
+                                                                        'admin.userManagement.noPermissions',
+                                                                        'None'
+                                                                    )}
+                                                                </span>
+                                                            ) : (
+                                                                getPermissionFlags(
+                                                                    u.permissions
+                                                                ).map(flag => (
+                                                                    <span
+                                                                        key={flag}
+                                                                        className={`${PERMISSION_COLORS[flag]} text-white text-xs px-2 py-0.5 rounded`}
+                                                                    >
+                                                                        {PERMISSION_LABELS[flag]}
+                                                                    </span>
+                                                                ))
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className='p-4'>
                                                         <div className='text-sm'>
                                                             <p className='text-gray-400'>
                                                                 {t('admin.userManagement.scans')}:{' '}
@@ -667,6 +758,17 @@ export default function AdminUsersPage() {
                                                             >
                                                                 {t(
                                                                     'admin.userManagement.createBotKey'
+                                                                )}
+                                                            </button>
+                                                            <button
+                                                                onClick={() =>
+                                                                    openPermissionsModal(u)
+                                                                }
+                                                                className='bg-purple-600/20 border border-purple-600/50 text-purple-300 px-3 py-1 rounded-lg text-sm hover:bg-purple-600/30 transition-colors'
+                                                            >
+                                                                {t(
+                                                                    'admin.userManagement.managePermissions',
+                                                                    'Permissions'
                                                                 )}
                                                             </button>
                                                         </div>
@@ -1006,6 +1108,208 @@ export default function AdminUsersPage() {
                                                 </div>
                                             </>
                                         )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {showPermissionsModal.show && (
+                                <div
+                                    className='fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4'
+                                    onClick={e => {
+                                        if (e.target === e.currentTarget) {
+                                            setShowPermissionsModal({
+                                                show: false,
+                                                userId: '',
+                                                userName: '',
+                                                currentPermissions: 0,
+                                            });
+                                        }
+                                    }}
+                                >
+                                    <div className='bg-slate-800 border border-purple-500/30 rounded-xl p-6 max-w-md w-full shadow-2xl'>
+                                        <div className='flex items-center justify-between mb-4'>
+                                            <h3 className='text-xl font-bold text-purple-400'>
+                                                {t(
+                                                    'admin.userManagement.permissionsTitle',
+                                                    'Manage Permissions'
+                                                )}
+                                            </h3>
+                                            <button
+                                                onClick={() =>
+                                                    setShowPermissionsModal({
+                                                        show: false,
+                                                        userId: '',
+                                                        userName: '',
+                                                        currentPermissions: 0,
+                                                    })
+                                                }
+                                                className='text-gray-400 hover:text-white transition-colors'
+                                            >
+                                                <svg
+                                                    className='w-6 h-6'
+                                                    fill='none'
+                                                    stroke='currentColor'
+                                                    viewBox='0 0 24 24'
+                                                >
+                                                    <path
+                                                        strokeLinecap='round'
+                                                        strokeLinejoin='round'
+                                                        strokeWidth={2}
+                                                        d='M6 18L18 6M6 6l12 12'
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <p className='text-gray-300 mb-6'>
+                                            {t(
+                                                'admin.userManagement.permissionsFor',
+                                                'Set permissions for'
+                                            )}{' '}
+                                            <strong className='text-white'>
+                                                {showPermissionsModal.userName}
+                                            </strong>
+                                        </p>
+                                        <div className='space-y-3'>
+                                            <label className='flex items-center gap-3 p-3 bg-slate-700/30 border border-slate-600/50 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors'>
+                                                <input
+                                                    type='checkbox'
+                                                    checked={hasPermission(
+                                                        pendingPermissions,
+                                                        UserPermission.ModerateFiles
+                                                    )}
+                                                    onChange={() =>
+                                                        setPendingPermissions(
+                                                            togglePermission(
+                                                                pendingPermissions,
+                                                                UserPermission.ModerateFiles
+                                                            )
+                                                        )
+                                                    }
+                                                    className='w-5 h-5 rounded border-slate-500 bg-slate-700 text-orange-500 focus:ring-orange-500 focus:ring-offset-0'
+                                                />
+                                                <div>
+                                                    <span className='text-white font-medium'>
+                                                        {t(
+                                                            'admin.userManagement.permission.moderateFiles',
+                                                            'Moderate Files'
+                                                        )}
+                                                    </span>
+                                                    <p className='text-gray-400 text-sm'>
+                                                        {t(
+                                                            'admin.userManagement.permission.moderateFilesDesc',
+                                                            'Can review, take down, and restore files'
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </label>
+                                            <label className='flex items-center gap-3 p-3 bg-slate-700/30 border border-slate-600/50 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors'>
+                                                <input
+                                                    type='checkbox'
+                                                    checked={hasPermission(
+                                                        pendingPermissions,
+                                                        UserPermission.ViewAuditLog
+                                                    )}
+                                                    onChange={() =>
+                                                        setPendingPermissions(
+                                                            togglePermission(
+                                                                pendingPermissions,
+                                                                UserPermission.ViewAuditLog
+                                                            )
+                                                        )
+                                                    }
+                                                    className='w-5 h-5 rounded border-slate-500 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0'
+                                                />
+                                                <div>
+                                                    <span className='text-white font-medium'>
+                                                        {t(
+                                                            'admin.userManagement.permission.viewAuditLog',
+                                                            'View Audit Log'
+                                                        )}
+                                                    </span>
+                                                    <p className='text-gray-400 text-sm'>
+                                                        {t(
+                                                            'admin.userManagement.permission.viewAuditLogDesc',
+                                                            'Can view all admin review history'
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </label>
+                                            <label className='flex items-center gap-3 p-3 bg-slate-700/30 border border-slate-600/50 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors'>
+                                                <input
+                                                    type='checkbox'
+                                                    checked={hasPermission(
+                                                        pendingPermissions,
+                                                        UserPermission.ManageReports
+                                                    )}
+                                                    onChange={() =>
+                                                        setPendingPermissions(
+                                                            togglePermission(
+                                                                pendingPermissions,
+                                                                UserPermission.ManageReports
+                                                            )
+                                                        )
+                                                    }
+                                                    className='w-5 h-5 rounded border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0'
+                                                />
+                                                <div>
+                                                    <span className='text-white font-medium'>
+                                                        {t(
+                                                            'admin.userManagement.permission.manageReports',
+                                                            'Manage Reports'
+                                                        )}
+                                                    </span>
+                                                    <p className='text-gray-400 text-sm'>
+                                                        {t(
+                                                            'admin.userManagement.permission.manageReportsDesc',
+                                                            'Can handle user reports (future)'
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        </div>
+                                        <div className='bg-slate-700/30 border border-slate-600/50 rounded-lg p-3 mt-4'>
+                                            <p className='text-gray-400 text-sm'>
+                                                {t(
+                                                    'admin.userManagement.permissionsValue',
+                                                    'Permissions value'
+                                                )}
+                                                :{' '}
+                                                <code className='text-purple-400'>
+                                                    {pendingPermissions}
+                                                </code>
+                                            </p>
+                                        </div>
+                                        <div className='flex gap-3 mt-6'>
+                                            <button
+                                                onClick={() =>
+                                                    setShowPermissionsModal({
+                                                        show: false,
+                                                        userId: '',
+                                                        userName: '',
+                                                        currentPermissions: 0,
+                                                    })
+                                                }
+                                                className='flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg transition-colors'
+                                            >
+                                                {t('admin.userManagement.cancel')}
+                                            </button>
+                                            <button
+                                                onClick={updateUserPermissions}
+                                                disabled={
+                                                    actionLoading ===
+                                                    `permissions-${showPermissionsModal.userId}`
+                                                }
+                                                className='flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed'
+                                            >
+                                                {actionLoading ===
+                                                `permissions-${showPermissionsModal.userId}`
+                                                    ? t('common.loading', 'Loading...')
+                                                    : t(
+                                                          'admin.userManagement.savePermissions',
+                                                          'Save Permissions'
+                                                      )}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}

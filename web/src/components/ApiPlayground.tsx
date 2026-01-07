@@ -241,23 +241,23 @@ export default function ApiPlayground() {
         switch (selectedEndpoint) {
             case 'upload':
                 if (!selectedFile) return '';
-                return `curl -X POST https://api.safeturned.com/v1.0/files \\
+                return `curl -X POST https://api.safeturned.com/v2.0/files \\
   -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -F "file=@${selectedFile.name}" \\
   -F "forceAnalyze=false"`;
             case 'getByHash':
-                return `curl -X GET https://api.safeturned.com/v1.0/files/${hashQuery || '{hash}'} \\
+                return `curl -X GET https://api.safeturned.com/v2.0/files/${hashQuery || '{hash}'} \\
   -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}"`;
             case 'getByFilename':
-                return `curl -X GET https://api.safeturned.com/v1.0/files/filename/${encodeURIComponent(filenameQuery || '{filename}')} \\
+                return `curl -X GET https://api.safeturned.com/v2.0/files/filename/${encodeURIComponent(filenameQuery || '{filename}')} \\
   -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}"`;
             case 'analytics':
-                return `curl -X GET https://api.safeturned.com/v1.0/files/analytics \\
+                return `curl -X GET https://api.safeturned.com/v2.0/files/analytics \\
   -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}"`;
             case 'chunkedUpload':
                 return `# See documentation for complete chunked upload process
 # Step 1: Initiate
-curl -X POST https://api.safeturned.com/v1.0/files/upload/initiate \\
+curl -X POST https://api.safeturned.com/v2.0/files/upload/initiate \\
   -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
   -d '{"fileName":"file.dll","fileSizeBytes":10485760,"fileHash":"...","totalChunks":2}'`;
@@ -267,30 +267,30 @@ curl -X POST https://api.safeturned.com/v1.0/files/upload/initiate \\
     };
 
     const endpoints = [
-        { id: 'upload' as EndpointType, name: 'Upload File', method: 'POST', path: '/v1.0/files' },
+        { id: 'upload' as EndpointType, name: 'Upload File', method: 'POST', path: '/v2.0/files' },
         {
             id: 'getByHash' as EndpointType,
             name: 'Get by Hash',
             method: 'GET',
-            path: '/v1.0/files/{hash}',
+            path: '/v2.0/files/{hash}',
         },
         {
             id: 'getByFilename' as EndpointType,
             name: 'Get by Filename',
             method: 'GET',
-            path: '/v1.0/files/filename/{filename}',
+            path: '/v2.0/files/filename/{filename}',
         },
         {
             id: 'analytics' as EndpointType,
             name: 'Get Analytics',
             method: 'GET',
-            path: '/v1.0/files/analytics',
+            path: '/v2.0/files/analytics',
         },
         {
             id: 'chunkedUpload' as EndpointType,
             name: 'Chunked Upload',
             method: 'POST',
-            path: '/v1.0/files/upload/*',
+            path: '/v2.0/files/upload/*',
         },
     ];
 

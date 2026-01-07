@@ -29,7 +29,7 @@ public class ApiKeyUsageController : ControllerBase
     {
         var userId = GetUserId();
         var tier = User.GetTier();
-        var isAdmin = User.FindFirst(AuthConstants.IsAdminClaim)?.Value == "true";
+        var isAdmin = UserPermissionHelper.IsAdministrator(User);
 
         var limit = isAdmin
             ? TierConstants.RateLimitAdmin

@@ -32,13 +32,13 @@ public class AdminSeed
                 .FirstOrDefault(x => x.Provider == AuthProvider.Discord && x.ProviderUserId == adminDiscordId);
             if (existingUserIdentity?.User != null)
             {
-                if (existingUserIdentity.User.IsAdmin)
+                if (existingUserIdentity.User.IsAdministrator)
                 {
                     _logger.Information("Configured admin user {UserId} already exists, skipping seed", existingUserIdentity.User.Id);
                     return;
                 }
 
-                existingUserIdentity.User.IsAdmin = true;
+                existingUserIdentity.User.Permissions = UserPermission.Administrator;
                 existingUserIdentity.User.Tier = TierType.Premium;
                 _context.SaveChanges();
 
@@ -53,7 +53,7 @@ public class AdminSeed
                 Tier = TierType.Premium,
                 CreatedAt = DateTime.UtcNow,
                 IsActive = true,
-                IsAdmin = true
+                Permissions = UserPermission.Administrator
             };
 
             _context.Set<User>().Add(adminUser);

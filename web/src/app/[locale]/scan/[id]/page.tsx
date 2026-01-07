@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
+import { encodeHashForUrl } from '@/lib/utils';
 
 interface RecentScan {
     id: string;
@@ -25,7 +26,7 @@ export default function ScanResultPage() {
                 const scan = scans.find(s => s.id === id);
 
                 if (scan?.fileHash) {
-                    router.push(`/result/${scan.fileHash}`);
+                    router.push(`/result/${encodeHashForUrl(scan.fileHash)}`);
                 } else {
                     router.push('/');
                 }

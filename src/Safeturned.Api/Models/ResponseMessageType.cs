@@ -7,5 +7,10 @@ public enum ResponseMessageType
     FileAlreadyUploadedSkippedAnalysis,
     FileReanalyzedSuccessfully,
     FileNotDotNetAssembly,
-    UnknownError
+    UnknownError,
+
+    NoFileUploaded,
+    InvalidFileExtension,
+    JobQueuedSuccessfully,
+    JobNotFound
 }

@@ -38,6 +38,7 @@ jobs:
         run: |
           echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+          echo "APP_VERSION=build.${{ github.run_number }}.${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Deploy
         working-directory: src/Safeturned.AppHost
@@ -51,7 +52,8 @@ jobs:
           DockerRegistry__RegistryUsername: ${{ github.actor }}
           DockerRegistry__RegistryPassword: ${{ secrets.GITHUB_TOKEN }}
           Deployment__RemoteDeployPath: /opt/safeturned
-          IMAGE_TAG_SUFFIX: build.${{ github.run_number }}.${{ env.SHORT_SHA }}
+          IMAGE_TAG_SUFFIX: ${{ env.APP_VERSION }}
+          Parameters__AppVersion: ${{ env.APP_VERSION }}
           Parameters__DatabasePassword: ${{ secrets.DATABASE_PASSWORD }}
           Parameters__RedisPassword: ${{ secrets.REDIS_PASSWORD }}
           Parameters__SafeturnedBotApiKey: ${{ secrets.SAFETURNED_BOT_API_KEY }}

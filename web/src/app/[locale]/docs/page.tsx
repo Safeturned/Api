@@ -317,7 +317,7 @@ export default function DocsPage() {
                                     <span className='px-3 py-1 bg-green-500/20 text-green-400 rounded font-mono text-sm font-semibold'>
                                         POST
                                     </span>
-                                    <code className='text-purple-400 font-mono'>/v1.0/files</code>
+                                    <code className='text-purple-400 font-mono'>/v2.0/files</code>
                                 </div>
                                 <p className='text-gray-300 mb-4'>
                                     {t('docs.endpoints.upload.title')}
@@ -345,7 +345,7 @@ export default function DocsPage() {
                                         POST
                                     </span>
                                     <code className='text-purple-400 font-mono'>
-                                        /v1.0/files/upload/*
+                                        /v2.0/files/upload/*
                                     </code>
                                 </div>
                                 <p className='text-gray-300 mb-4'>
@@ -359,19 +359,19 @@ export default function DocsPage() {
                                         <ol className='text-gray-300 space-y-2 ml-4 list-decimal text-sm'>
                                             <li>
                                                 <code className='text-purple-400'>
-                                                    POST /v1.0/files/upload/initiate
+                                                    POST /v2.0/files/upload/initiate
                                                 </code>{' '}
                                                 - {t('docs.endpoints.chunkedUpload.step1')}
                                             </li>
                                             <li>
                                                 <code className='text-purple-400'>
-                                                    POST /v1.0/files/upload/chunk
+                                                    POST /v2.0/files/upload/chunk
                                                 </code>{' '}
                                                 - {t('docs.endpoints.chunkedUpload.step2')}
                                             </li>
                                             <li>
                                                 <code className='text-purple-400'>
-                                                    POST /v1.0/files/upload/complete
+                                                    POST /v2.0/files/upload/complete
                                                 </code>{' '}
                                                 - {t('docs.endpoints.chunkedUpload.step3')}
                                             </li>
@@ -392,7 +392,7 @@ export default function DocsPage() {
                                         GET
                                     </span>
                                     <code className='text-purple-400 font-mono'>
-                                        /v1.0/files/{'{hash}'}
+                                        /v2.0/files/{'{hash}'}
                                     </code>
                                 </div>
                                 <p className='text-gray-300 mb-4'>
@@ -406,7 +406,7 @@ export default function DocsPage() {
                                         GET
                                     </span>
                                     <code className='text-purple-400 font-mono'>
-                                        /v1.0/files/filename/{'{filename}'}
+                                        /v2.0/files/filename/{'{filename}'}
                                     </code>
                                 </div>
                                 <p className='text-gray-300 mb-4'>
@@ -420,7 +420,7 @@ export default function DocsPage() {
                                         GET
                                     </span>
                                     <code className='text-purple-400 font-mono'>
-                                        /v1.0/files/analytics
+                                        /v2.0/files/analytics
                                     </code>
                                 </div>
                                 <p className='text-gray-300 mb-4'>
@@ -818,7 +818,7 @@ export default function DocsPage() {
                                         {t('docs.badgeTokens.usingTokenDescription')}
                                     </p>
                                     <CodeBlock
-                                        code={`curl -X POST ${API_BASE_URL}/v1.0/files \\
+                                        code={`curl -X POST ${API_BASE_URL}/v2.0/files \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F "file=@/path/to/your/plugin.dll" \\
   -F "forceAnalyze=false" \\
@@ -1068,7 +1068,7 @@ using UnityEngine.Networking;
 public class SafeturnedScanner : MonoBehaviour
 {
     private const string API_KEY = "YOUR_API_KEY"; // TODO: Load from secure storage
-    private const string BASE_URL = "${API_BASE_URL}/v1.0";
+    private const string BASE_URL = "${API_BASE_URL}/v2.0";
 
     public IEnumerator ScanPlugin(string pluginPath)
     {
@@ -1119,7 +1119,7 @@ public class ScanResult
 // Usage in Unturned plugin:
 // StartCoroutine(ScanPlugin("./Plugins/MyPlugin.dll"));`;
 
-const curlExample = `curl -X POST ${API_BASE_URL}/v1.0/files \\
+const curlExample = `curl -X POST ${API_BASE_URL}/v2.0/files \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F "file=@/path/to/your/plugin.dll" \\
   -F "forceAnalyze=false"`;
@@ -1133,7 +1133,7 @@ async function scanFile(filePath) {
     form.append('file', fs.createReadStream(filePath));
     form.append('forceAnalyze', 'false');
 
-    const response = await fetch(\`\${API_BASE_URL}/v1.0/files\`, {
+    const response = await fetch(\`\${API_BASE_URL}/v2.0/files\`, {
         method: 'POST',
         headers: {
             'Authorization': 'Bearer YOUR_API_KEY'
@@ -1153,7 +1153,7 @@ scanFile('./MyPlugin.dll');`;
 const pythonExample = `import requests
 
 def scan_file(file_path):
-    url = '${API_BASE_URL}/v1.0/files'
+    url = '${API_BASE_URL}/v2.0/files'
     headers = {
         'Authorization': 'Bearer YOUR_API_KEY'
     }
@@ -1199,7 +1199,7 @@ public class SafeturnedClient
         form.Add(new StringContent("false"), "forceAnalyze");
 
         var response = await _client.PostAsync(
-            "${API_BASE_URL}/v1.0/files", form);
+            "${API_BASE_URL}/v2.0/files", form);
 
         var result = await response.Content.ReadAsStringAsync();
         Console.WriteLine($"Scan result: {result}");
@@ -1300,7 +1300,7 @@ public class ChunkedUploader : MonoBehaviour
 
         string initJson = JsonUtility.ToJson(initRequest);
         using (UnityWebRequest www = UnityWebRequest.Post(
-            "${API_BASE_URL}/v1.0/files/upload/initiate", initJson, "application/json"))
+            "${API_BASE_URL}/v2.0/files/upload/initiate", initJson, "application/json"))
         {
             www.SetRequestHeader("Authorization", "Bearer " + _apiKey);
             yield return www.SendWebRequest();
@@ -1328,7 +1328,7 @@ public class ChunkedUploader : MonoBehaviour
                 form.AddBinaryData("chunk", chunk, fileName);
 
                 using (UnityWebRequest chunkWww = UnityWebRequest.Post(
-                    "${API_BASE_URL}/v1.0/files/upload/chunk", form))
+                    "${API_BASE_URL}/v2.0/files/upload/chunk", form))
                 {
                     chunkWww.SetRequestHeader("Authorization", "Bearer " + _apiKey);
                     yield return chunkWww.SendWebRequest();
@@ -1348,7 +1348,7 @@ public class ChunkedUploader : MonoBehaviour
             string finalizeJson = JsonUtility.ToJson(finalizeRequest);
 
             using (UnityWebRequest finalizeWww = UnityWebRequest.Post(
-                "${API_BASE_URL}/v1.0/files/upload/complete", finalizeJson, "application/json"))
+                "${API_BASE_URL}/v2.0/files/upload/complete", finalizeJson, "application/json"))
             {
                 finalizeWww.SetRequestHeader("Authorization", "Bearer " + _apiKey);
                 yield return finalizeWww.SendWebRequest();
@@ -1418,7 +1418,7 @@ public class ChunkedUploadClient
         };
 
         var initResponse = await _client.PostAsJsonAsync(
-            $"{_baseUrl}/v1.0/files/upload/initiate",
+            $"{_baseUrl}/v2.0/files/upload/initiate",
             initRequest);
 
         var initContent = await initResponse.Content.ReadAsStringAsync();
@@ -1442,7 +1442,7 @@ public class ChunkedUploadClient
                 Path.GetFileName(filePath));
 
             var response = await _client.PostAsync(
-                $"{_baseUrl}/v1.0/files/upload/chunk",
+                $"{_baseUrl}/v2.0/files/upload/chunk",
                 form);
 
             if (!response.IsSuccessStatusCode)
@@ -1454,7 +1454,7 @@ public class ChunkedUploadClient
         // Step 3: Finalize upload
         var finalizeRequest = new { sessionId = sessionId };
         var finalResponse = await _client.PostAsJsonAsync(
-            $"{_baseUrl}/v1.0/files/upload/finalize",
+            $"{_baseUrl}/v2.0/files/upload/finalize",
             finalizeRequest);
 
         var finalContent = await finalResponse.Content.ReadAsStringAsync();
@@ -1497,7 +1497,7 @@ async function uploadLargeFile(filePath, apiKey) {
     const fileHash = await computeFileHash(filePath);
     const totalChunks = Math.ceil(stats.size / CHUNK_SIZE);
 
-    const initResponse = await fetch(\`${API_BASE_URL}/v1.0/files/upload/initiate\`, {
+    const initResponse = await fetch(\`${API_BASE_URL}/v2.0/files/upload/initiate\`, {
         method: 'POST',
         headers: {
             'Authorization': \`Bearer \${apiKey}\`,
@@ -1522,7 +1522,7 @@ async function uploadLargeFile(filePath, apiKey) {
         form.append('chunkIndex', chunkIndex.toString());
         form.append('chunk', chunk, { filename: filePath.split('/').pop() });
 
-        await fetch(\`${API_BASE_URL}/v1.0/files/upload/chunk\`, {
+        await fetch(\`${API_BASE_URL}/v2.0/files/upload/chunk\`, {
             method: 'POST',
             headers: { 'Authorization': \`Bearer \${apiKey}\` },
             body: form
@@ -1532,7 +1532,7 @@ async function uploadLargeFile(filePath, apiKey) {
         chunkIndex++;
     }
 
-    const finalizeResponse = await fetch(\`${API_BASE_URL}/v1.0/files/upload/complete\`, {
+    const finalizeResponse = await fetch(\`${API_BASE_URL}/v2.0/files/upload/complete\`, {
         method: 'POST',
         headers: {
             'Authorization': \`Bearer \${apiKey}\`,
@@ -1569,7 +1569,7 @@ def upload_large_file(file_path, api_key):
 
     # Step 1: Initiate upload
     init_response = requests.post(
-        '${API_BASE_URL}/v1.0/files/upload/initiate',
+        '${API_BASE_URL}/v2.0/files/upload/initiate',
         headers=headers,
         json={
             'fileName': os.path.basename(file_path),
@@ -1592,7 +1592,7 @@ def upload_large_file(file_path, api_key):
             }
 
             requests.post(
-                '${API_BASE_URL}/v1.0/files/upload/chunk',
+                '${API_BASE_URL}/v2.0/files/upload/chunk',
                 headers=headers,
                 files=files,
                 data=data
@@ -1602,7 +1602,7 @@ def upload_large_file(file_path, api_key):
 
     # Step 3: Complete upload
     finalize_response = requests.post(
-        '${API_BASE_URL}/v1.0/files/upload/complete',
+        '${API_BASE_URL}/v2.0/files/upload/complete',
         headers=headers,
         json={'sessionId': session_id}
     )
@@ -1617,7 +1617,7 @@ const chunkedUploadCurlExample = `#!/bin/bash
 API_KEY="YOUR_API_KEY"
 FILE_PATH="./LargePlugin.dll"
 CHUNK_SIZE=5242880  # 5MB
-API_BASE="${API_BASE_URL}/v1.0/files/upload"
+API_BASE="${API_BASE_URL}/v2.0/files/upload"
 
 # Compute file hash
 FILE_HASH=$(sha256sum "$FILE_PATH" | awk '{print $1}')

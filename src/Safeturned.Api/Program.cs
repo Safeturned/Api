@@ -26,6 +26,9 @@ using Safeturned.Api.Models;
 using Safeturned.Api.Scripts.Files;
 using Safeturned.Api.Clients.FileChecker;
 using Safeturned.Api.Services;
+using Safeturned.Api.Database.Models;
+using Microsoft.AspNetCore.Authorization;
+using Safeturned.Api.Auth;
 using Sentry.Hangfire;
 using Serilog;
 using Serilog.Debugging;
@@ -69,8 +72,13 @@ host.UseDefaultServiceProvider((_, options) =>
 });
 
 var sentryFilter = new SentryRequestFilter();
+var appVersion = config.GetValue<string>("Parameters:AppVersion");
 builder.WebHost.UseSentry(x =>
 {
+    if (!string.IsNullOrEmpty(appVersion))
+    {
+        x.Release = appVersion;
+    }
     x.AddExceptionFilterForType<OperationCanceledException>();
     x.SetBeforeSend((sentryEvent, _) => sentryFilter.Filter(sentryEvent));
 });
@@ -97,6 +105,7 @@ services.AddScoped<ILoaderReleaseService, LoaderReleaseService>();
 services.AddScoped<IPluginInstallerReleaseService, PluginInstallerReleaseService>();
 services.AddScoped<IPluginReleaseService, PluginReleaseService>();
 services.AddScoped<IOfficialBadgeService, OfficialBadgeService>();
+services.AddScoped<IFileAdminService, FileAdminService>();
 
 services.AddSingleton(_ => Channel.CreateUnbounded<ApiKeyUsageLogRequest>(new UnboundedChannelOptions
 {
@@ -129,6 +138,7 @@ services.AddStackExchangeRedisCache(options =>
 });
 
 services.AddScoped<IAnalyticsService, AnalyticsService>();
+services.AddScoped<IAnalysisJobService, AnalysisJobService>();
 
 services.AddApiVersioning(options =>
 {
@@ -157,7 +167,10 @@ services.AddHangfire(x => x
             PrepareSchemaIfNecessary = true,
             InvisibilityTimeout = TimeSpan.FromHours(7),
         }));
-services.AddHangfireServer();
+services.AddHangfireServer(options =>
+{
+    options.WorkerCount = config.GetValue("Hangfire:WorkerCount", 10);
+});
 
 var maxChunkSizeBytes = config.GetValue<int>("UploadLimits:MaxChunkSizeBytes");
 var maxFileSizeBytes = config.GetValue<long>("UploadLimits:MaxFileSizeBytes");
@@ -344,12 +357,15 @@ else
     logger.Warning("DataProtection:KeyPath not configured. Antiforgery tokens may become invalid after API restart.");
 }
 
+services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
+
 services.AddAuthorizationBuilder()
     .AddPolicy(KnownAuthPolicies.AdminOnly, policy =>
     {
         policy.RequireAuthenticatedUser();
-        policy.RequireClaim(AuthConstants.IsAdminClaim, "true");
-    });
+        policy.Requirements.Add(new PermissionRequirement(UserPermission.Administrator));
+    })
+    .AddPermissionPolicies();
 
 services.AddAntiforgery(options =>
 {
@@ -512,6 +528,11 @@ recurringJobManager.AddOrUpdate<RevokeAllApiKeysJob>(
     "revoke-all-api-keys",
     job => job.RevokeAllApiKeysAsync(null!, CancellationToken.None),
     Cron.Never());
+
+recurringJobManager.AddOrUpdate<AnalysisJobCleanupJob>(
+    "analysis-job-cleanup",
+    job => job.CleanupExpiredJobsAsync(null!, CancellationToken.None),
+    "0 */4 * * *");
 
 app.Run();
 

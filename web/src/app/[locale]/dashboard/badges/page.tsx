@@ -542,7 +542,7 @@ export default function BadgesPage() {
                                             {t('badges.howToUseToken')}
                                         </p>
                                         <code className='text-green-300 text-xs block bg-slate-900/50 p-2 rounded mb-2 overflow-x-auto'>
-                                            curl -X POST {API_BASE_URL}/v1.0/files \<br />
+                                            curl -X POST {API_BASE_URL}/v2.0/files \<br />
                                             &nbsp;&nbsp;-H &quot;Authorization: Bearer
                                             YOUR_API_KEY&quot; \
                                             <br />

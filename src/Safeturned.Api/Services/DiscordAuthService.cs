@@ -68,8 +68,7 @@ public class DiscordAuthService : IDiscordAuthService
                 Email = email,
                 Tier = TierType.Free,
                 CreatedAt = DateTime.UtcNow,
-                IsActive = true,
-                IsAdmin = false
+                IsActive = true
             };
 
             db.Set<User>().Add(user);

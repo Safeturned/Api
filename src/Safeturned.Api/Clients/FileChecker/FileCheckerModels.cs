@@ -1,13 +1,24 @@
 namespace Safeturned.Api.Clients.FileChecker;
 
-public record FileCheckResult(
-    float Score,
-    string? Message,
-    bool Checked,
-    string Version,
-    object? Results,
-    AssemblyMetadata? Metadata
-);
+public record FileCheckResult
+{
+    public float Score { get; init; }
+    public string Version { get; init; } = string.Empty;
+    public FeatureResult[]? Features { get; init; }
+    public AssemblyMetadata? Metadata { get; init; }
+}
+
+public record FeatureResult
+{
+    public string Name { get; init; } = string.Empty;
+    public float Score { get; init; }
+    public List<FeatureMessage>? Messages { get; init; }
+}
+
+public record FeatureMessage
+{
+    public string Text { get; init; } = string.Empty;
+}
 
 public record AssemblyMetadata
 {

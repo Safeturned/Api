@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useChunkedUpload } from '@/hooks/useChunkedUpload';
 import StandardFileUpload from '@/components/StandardFileUpload';
 import { formatScanTime, computeFileHash, encodeHashForUrl } from '@/lib/utils';
-import { api } from '@/lib/api-client';
+import { api, isPendingResponse, pollJobUntilComplete } from '@/lib/api-client';
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
 import BackToTop from '@/components/BackToTop';
@@ -104,10 +104,20 @@ export default function Page() {
                 const formData = new FormData();
                 formData.append('file', file, file.name);
 
-                const result = await api.post<{ id?: string; fileHash?: string; hash?: string }>(
+                const uploadResponse = await api.post<{ id?: string; fileHash?: string; hash?: string }>(
                     '/api/upload',
                     formData
                 );
+
+                let result: { id?: string; fileHash?: string; hash?: string };
+
+                if (isPendingResponse(uploadResponse)) {
+                    result = await pollJobUntilComplete<{ id?: string; fileHash?: string; hash?: string }>(
+                        uploadResponse.jobId!
+                    );
+                } else {
+                    result = uploadResponse;
+                }
 
                 sessionStorage.setItem('uploadResult', JSON.stringify(result));
                 let hash;

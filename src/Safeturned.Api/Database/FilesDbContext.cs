@@ -25,6 +25,8 @@ public class FilesDbContext : DbContext
     private DbSet<LoaderRelease> LoaderReleases { get; set; }
     private DbSet<PluginInstallerRelease> PluginInstallerReleases { get; set; }
     private DbSet<PluginRelease> PluginReleases { get; set; }
+    private DbSet<AnalysisJob> AnalysisJobs { get; set; }
+    private DbSet<FileAdminReview> FileAdminReviews { get; set; }
     // ReSharper restore UnusedMember.Local
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -136,6 +138,13 @@ public class FilesDbContext : DbContext
         modelBuilder.Entity<FileData>()
             .HasIndex(f => f.AddDateTime);
 
+        modelBuilder.Entity<FileData>()
+            .OwnsMany(f => f.Features, featuresBuilder =>
+            {
+                featuresBuilder.ToJson();
+                featuresBuilder.OwnsMany(f => f.Messages);
+            });
+
         modelBuilder.Entity<ScanRecord>()
             .HasIndex(s => s.ScanDate);
 
@@ -162,5 +171,65 @@ public class FilesDbContext : DbContext
 
         modelBuilder.Entity<PluginRelease>()
             .HasIndex(p => new { p.Framework, p.IsLatest });
+
+        modelBuilder.Entity<AnalysisJob>()
+            .HasIndex(j => j.Status);
+
+        modelBuilder.Entity<AnalysisJob>()
+            .HasIndex(j => j.CreatedAt);
+
+        modelBuilder.Entity<AnalysisJob>()
+            .HasIndex(j => j.ExpiresAt);
+
+        modelBuilder.Entity<AnalysisJob>()
+            .HasIndex(j => j.UserId);
+
+        modelBuilder.Entity<AnalysisJob>()
+            .HasIndex(j => j.FileHash);
+
+        modelBuilder.Entity<FileAdminReview>()
+            .HasOne(r => r.File)
+            .WithMany(f => f.AdminReviews)
+            .HasForeignKey(r => r.FileHash)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<FileAdminReview>()
+            .HasOne(r => r.Reviewer)
+            .WithMany(u => u.FileReviews)
+            .HasForeignKey(r => r.ReviewerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<FileAdminReview>()
+            .HasIndex(r => r.FileHash);
+
+        modelBuilder.Entity<FileAdminReview>()
+            .HasIndex(r => r.ReviewerId);
+
+        modelBuilder.Entity<FileAdminReview>()
+            .HasIndex(r => r.CreatedAt);
+
+        modelBuilder.Entity<FileAdminReview>()
+            .HasIndex(r => r.Verdict);
+
+        modelBuilder.Entity<FileData>()
+            .HasIndex(f => f.IsTakenDown);
+
+        modelBuilder.Entity<FileData>()
+            .HasIndex(f => f.CurrentVerdict);
+
+        modelBuilder.Entity<FileData>()
+            .HasIndex(f => f.TakenDownAt);
+
+        modelBuilder.Entity<FileData>()
+            .HasOne(f => f.User)
+            .WithMany(u => u.ScannedFiles)
+            .HasForeignKey(f => f.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<FileData>()
+            .HasOne(f => f.TakenDownByUser)
+            .WithMany()
+            .HasForeignKey(f => f.TakenDownByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

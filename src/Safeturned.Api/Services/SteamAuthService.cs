@@ -120,11 +120,10 @@ public class SteamAuthService : ISteamAuthService
         var newUser = new User
         {
             Id = Guid.NewGuid(),
-            Email = null, // Steam doesn't provide email, so we leave it empty
+            Email = null,
             Tier = TierType.Free,
             CreatedAt = DateTime.UtcNow,
-            IsActive = true,
-            IsAdmin = false
+            IsActive = true
         };
 
         db.Set<User>().Add(newUser);

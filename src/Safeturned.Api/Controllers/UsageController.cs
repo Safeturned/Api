@@ -258,7 +258,7 @@ public class UsageController : ControllerBase
             .Select(k => k.Id)
             .ToListAsync();
 
-        var isAdmin = user.IsAdmin;
+        var isAdmin = user.IsAdministrator;
         var tier = user.Tier;
 
         var operationLimits = new List<object>();

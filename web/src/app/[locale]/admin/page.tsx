@@ -239,7 +239,7 @@ export default function AdminDashboard() {
                         </div>
                     )}
 
-                    <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+                    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
                         <Link
                             href='/admin/users'
                             className='bg-slate-800/40 backdrop-blur-md border border-purple-500/20 rounded-xl p-6 hover:border-purple-400/50 transition-all duration-200 group'
@@ -265,6 +265,31 @@ export default function AdminDashboard() {
                             <p className='text-gray-400'>
                                 {t('admin.userManagement.viewAndManage')}
                             </p>
+                        </Link>
+
+                        <Link
+                            href='/admin/files'
+                            className='bg-slate-800/40 backdrop-blur-md border border-orange-500/20 rounded-xl p-6 hover:border-orange-400/50 transition-all duration-200 group'
+                        >
+                            <div className='flex items-center justify-between mb-4'>
+                                <h2 className='text-2xl font-bold text-white group-hover:text-orange-300 transition-colors'>
+                                    {t('admin.fileModeration.title')}
+                                </h2>
+                                <svg
+                                    className='w-6 h-6 text-orange-400'
+                                    fill='none'
+                                    stroke='currentColor'
+                                    viewBox='0 0 24 24'
+                                >
+                                    <path
+                                        strokeLinecap='round'
+                                        strokeLinejoin='round'
+                                        strokeWidth={2}
+                                        d='M9 5l7 7-7 7'
+                                    />
+                                </svg>
+                            </div>
+                            <p className='text-gray-400'>{t('admin.fileModeration.description')}</p>
                         </Link>
 
                         <Link

@@ -8,6 +8,7 @@ using Safeturned.Api.Constants;
 using Safeturned.Api.Database;
 using Safeturned.Api.Database.Models;
 using Safeturned.Api.Helpers;
+using UserPermissionHelper = Safeturned.Api.Helpers.UserPermissionHelper;
 
 namespace Safeturned.Api.Services;
 
@@ -39,7 +40,7 @@ public class TokenService : ITokenService
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(AuthConstants.TierClaim, ((int)user.Tier).ToString()),
-            new Claim(AuthConstants.IsAdminClaim, user.IsAdmin.ToString().ToLowerInvariant())
+            new Claim(AuthConstants.PermissionsClaim, ((int)user.Permissions).ToString())
         };
 
         // Email is optional (Steam users don't have email)

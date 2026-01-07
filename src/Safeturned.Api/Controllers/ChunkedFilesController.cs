@@ -1,10 +1,6 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Safeturned.Api.Clients.FileChecker;
 using Safeturned.Api.Constants;
-using Safeturned.Api.Database;
-using Safeturned.Api.Database.Models;
 using Safeturned.Api.Filters;
 using Safeturned.Api.Helpers;
 using Safeturned.Api.Models;
@@ -18,25 +14,21 @@ namespace Safeturned.Api.Controllers;
 [ApiSecurityFilter]
 public class ChunkedFilesController : ControllerBase
 {
-    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IChunkStorageService _chunkStorageService;
-    private readonly IFileCheckingService _fileCheckingService;
-    private readonly IAnalyticsService _analyticsService;
+    private readonly IAnalysisJobService _analysisJobService;
     private readonly ILogger _logger;
     private readonly IConfiguration _configuration;
 
+    private const int DefaultV1TimeoutSeconds = 30;
+
     public ChunkedFilesController(
-        IServiceScopeFactory serviceScopeFactory,
         IChunkStorageService chunkStorageService,
-        IFileCheckingService fileCheckingService,
-        IAnalyticsService analyticsService,
+        IAnalysisJobService analysisJobService,
         ILogger logger,
         IConfiguration configuration)
     {
-        _serviceScopeFactory = serviceScopeFactory;
         _chunkStorageService = chunkStorageService;
-        _fileCheckingService = fileCheckingService;
-        _analyticsService = analyticsService;
+        _analysisJobService = analysisJobService;
         _logger = logger.ForContext<ChunkedFilesController>();
         _configuration = configuration;
     }
@@ -186,187 +178,62 @@ public class ChunkedFilesController : ControllerBase
                 _logger.Error("Failed to assemble file for session {SessionId}", request.SessionId);
                 return StatusCode(500, "Failed to assemble file.");
             }
-            var scanStartTime = DateTime.UtcNow;
-            var fileInfo = new FileInfo(finalFilePath);
-
-            bool canProcess;
-            await using (var stream = new FileStream(finalFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-            {
-                canProcess = await _fileCheckingService.CanProcessFileAsync(stream, cancellationToken);
-            }
-
-            if (!canProcess)
-            {
-                _logger.Warning("Assembled file for session {SessionId} is not a valid .NET assembly", request.SessionId);
-                await _chunkStorageService.CleanupSessionAsync(request.SessionId, cancellationToken);
-                return Ok(new FileCheckResponse(
-                    session.FileName,
-                    session.FileHash,
-                    0,
-                    false,
-                    ResponseMessageType.FileNotDotNetAssembly,
-                    DateTime.UtcNow,
-                    DateTime.UtcNow,
-                    session.FileSizeBytes,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null
-                ));
-            }
-            FileCheckResult processingContext;
-            await using (var stream = new FileStream(finalFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-            {
-                processingContext = await _fileCheckingService.CheckFileAsync(stream, cancellationToken);
-            }
-
-            var metadata = processingContext.Metadata;
 
             var (userId, apiKeyId) = HttpContext.GetUserContext();
+            var clientIp = HttpContext.GetIPAddress();
 
-            await using var scope = _serviceScopeFactory.CreateAsyncScope();
-            var filesDb = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+            await using var fileStream = new FileStream(finalFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-            Guid? validUserId = null;
-            if (userId.HasValue)
-            {
-                var userExists = await filesDb.Set<User>().AnyAsync(u => u.Id == userId.Value, cancellationToken);
-                if (userExists)
-                {
-                    validUserId = userId;
-                }
-                else
-                {
-                    _logger.Warning("User {UserId} from token does not exist in database, skipping user association", userId.Value);
-                }
-            }
+            var job = await _analysisJobService.CreateJobAsync(
+                fileStream,
+                session.FileName,
+                session.FileSizeBytes,
+                userId,
+                apiKeyId,
+                clientIp,
+                false,
+                request.BadgeToken,
+                cancellationToken);
 
-            var existingFile = await filesDb.Set<FileData>().FirstOrDefaultAsync(x => x.Hash == session.FileHash, cancellationToken);
-
-            if (existingFile == null)
-            {
-                var fileData = new FileData
-                {
-                    Hash = session.FileHash,
-                    Score = (int)processingContext.Score,
-                    FileName = session.FileName,
-                    SizeBytes = session.FileSizeBytes,
-                    DetectedType = "Assembly",
-                    AddDateTime = DateTime.UtcNow,
-                    LastScanned = DateTime.UtcNow,
-                    TimesScanned = 1,
-                    UserId = validUserId,
-                    ApiKeyId = apiKeyId,
-                    AnalyzerVersion = processingContext.Version,
-                    AssemblyCompany = metadata?.Company,
-                    AssemblyProduct = metadata?.Product,
-                    AssemblyTitle = metadata?.Title,
-                    AssemblyGuid = metadata?.Guid,
-                    AssemblyCopyright = metadata?.Copyright
-                };
-
-                await filesDb.Set<FileData>().AddAsync(fileData, cancellationToken);
-                await filesDb.SaveChangesAsync(cancellationToken);
-
-                if (!string.IsNullOrEmpty(request.BadgeToken) && validUserId.HasValue)
-                {
-                    var badges = await filesDb.Set<Badge>()
-                        .Where(b => b.UserId == validUserId.Value && b.RequireTokenForUpdate == true && b.UpdateToken != null)
-                        .ToListAsync(cancellationToken);
-
-                    foreach (var badge in badges)
-                    {
-                        if (BadgeTokenHelper.VerifyToken(request.BadgeToken, badge.UpdateToken!, badge.UpdateSalt))
-                        {
-                            _logger.Information("Badge {BadgeId} auto-updating via token to hash {Hash}",
-                                badge.Id, fileData.Hash);
-                            badge.LinkedFileHash = fileData.Hash;
-                            badge.UpdatedAt = DateTime.UtcNow;
-                            badge.VersionUpdateCount++;
-                        }
-                    }
-
-                    if (badges.Any())
-                    {
-                        await filesDb.SaveChangesAsync(cancellationToken);
-                    }
-                }
-            }
-            else
-            {
-                existingFile.Score = (int)processingContext.Score;
-                existingFile.FileName = session.FileName;
-                existingFile.SizeBytes = session.FileSizeBytes;
-                existingFile.LastScanned = DateTime.UtcNow;
-                existingFile.TimesScanned++;
-                existingFile.AnalyzerVersion = processingContext.Version;
-                existingFile.AssemblyCompany = metadata?.Company;
-                existingFile.AssemblyProduct = metadata?.Product;
-                existingFile.AssemblyTitle = metadata?.Title;
-                existingFile.AssemblyGuid = metadata?.Guid;
-                existingFile.AssemblyCopyright = metadata?.Copyright;
-                if (validUserId.HasValue && !existingFile.UserId.HasValue)
-                {
-                    existingFile.UserId = validUserId;
-                    existingFile.ApiKeyId = apiKeyId;
-                }
-
-                await filesDb.SaveChangesAsync(cancellationToken);
-
-                if (!string.IsNullOrEmpty(request.BadgeToken) && validUserId.HasValue)
-                {
-                    var badges = await filesDb.Set<Badge>()
-                        .Where(b => b.UserId == validUserId.Value && b.RequireTokenForUpdate == true && b.UpdateToken != null)
-                        .ToListAsync(cancellationToken);
-
-                    foreach (var badge in badges)
-                    {
-                        if (BadgeTokenHelper.VerifyToken(request.BadgeToken, badge.UpdateToken!, badge.UpdateSalt))
-                        {
-                            _logger.Information("Badge {BadgeId} auto-updating via token to hash {Hash}",
-                                badge.Id, existingFile.Hash);
-                            badge.LinkedFileHash = existingFile.Hash;
-                            badge.UpdatedAt = DateTime.UtcNow;
-                            badge.VersionUpdateCount++;
-                        }
-                    }
-
-                    if (badges.Any())
-                    {
-                        await filesDb.SaveChangesAsync(cancellationToken);
-                    }
-                }
-            }
-
-            var scanTime = DateTime.UtcNow - scanStartTime;
-            var isThreat = processingContext.Score >= 50;
-
-            await _analyticsService.RecordScanAsync(session.FileName, session.FileHash, processingContext.Score, isThreat, scanTime, validUserId, apiKeyId, cancellationToken);
-
-            _logger.Information("File processing completed for session {SessionId}. Score: {Score}, Time: {ScanTime}ms", request.SessionId, processingContext.Score, scanTime.TotalMilliseconds);
+            await _analysisJobService.EnqueueJobAsync(job, cancellationToken);
 
             await _chunkStorageService.CleanupSessionAsync(request.SessionId, cancellationToken);
 
-            return Ok(new FileCheckResponse(
-                session.FileName,
-                session.FileHash,
-                processingContext.Score,
-                true,
-                ResponseMessageType.NewFileProcessedSuccessfully,
-                DateTime.UtcNow,
-                DateTime.UtcNow,
-                session.FileSizeBytes,
-                processingContext.Version,
-                null,
-                metadata?.Company,
-                metadata?.Product,
-                metadata?.Title,
-                metadata?.Guid,
-                metadata?.Copyright
-            ));
+            var timeoutSeconds = _configuration.GetValue("Analysis:V1TimeoutSeconds", DefaultV1TimeoutSeconds);
+            var timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
+            var completedJob = await _analysisJobService.WaitForCompletionAsync(job.Id, timeout, cancellationToken);
+
+            if (completedJob?.Status == Database.Models.AnalysisJobStatus.Completed)
+            {
+                var result = _analysisJobService.DeserializeResult(completedJob.ResultJson);
+                if (result != null)
+                {
+                    _logger.Information("Chunked upload {SessionId} processed successfully via job queue. JobId: {JobId}",
+                        request.SessionId, job.Id);
+                    return Ok(result);
+                }
+            }
+
+            if (completedJob?.Status == Database.Models.AnalysisJobStatus.Failed)
+            {
+                _logger.Warning("Chunked upload {SessionId} analysis failed. JobId: {JobId}, Error: {Error}",
+                    request.SessionId, job.Id, completedJob.ErrorMessage);
+                return StatusCode(500, new
+                {
+                    Message = "File analysis failed",
+                    JobId = job.Id,
+                    Error = completedJob.ErrorMessage
+                });
+            }
+
+            _logger.Information("Chunked upload {SessionId} analysis timed out after {Timeout}s. JobId: {JobId}",
+                request.SessionId, timeoutSeconds, job.Id);
+
+            return Accepted(new FileUploadAsyncFallbackResponse(
+                "Analysis is taking longer than expected. Use the job ID to check status.",
+                job.Id,
+                $"/v2/files/jobs/{job.Id}"));
         }
         catch (Exception ex)
         {

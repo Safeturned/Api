@@ -65,7 +65,10 @@ public class AdminController : ControllerBase
 
         if (isAdmin.HasValue)
         {
-            query = query.Where(u => u.IsAdmin == isAdmin.Value);
+            if (isAdmin.Value)
+                query = query.Where(u => u.Permissions == UserPermission.Administrator);
+            else
+                query = query.Where(u => u.Permissions != UserPermission.Administrator);
         }
 
         var totalUsers = await query.CountAsync();
@@ -84,14 +87,32 @@ public class AdminController : ControllerBase
                     ?? x.Identities.Where(i => i.Provider == AuthProvider.Steam).Select(i => i.AvatarUrl).FirstOrDefault(),
                 AuthProvider = x.Identities.Where(i => i.Provider == AuthProvider.Discord || i.Provider == AuthProvider.Steam).Select(i => (int?)i.Provider).FirstOrDefault() ?? 0,
                 Tier = (int)x.Tier,
-                x.IsAdmin,
+                IsAdmin = x.Permissions == UserPermission.Administrator,
                 x.IsActive,
+                x.Permissions,
                 x.CreatedAt,
                 x.LastLoginAt,
                 ApiKeysCount = x.ApiKeys.Count,
                 ScannedFilesCount = x.ScannedFiles.Count
             })
             .ToListAsync();
+
+        var usersWithPermissions = users.Select(u => new
+        {
+            u.Id,
+            u.Email,
+            u.Username,
+            u.AvatarUrl,
+            u.AuthProvider,
+            u.Tier,
+            u.IsAdmin,
+            u.IsActive,
+            Permissions = (int)u.Permissions,
+            u.CreatedAt,
+            u.LastLoginAt,
+            u.ApiKeysCount,
+            u.ScannedFilesCount
+        }).ToList();
 
         _logger.Information("Admin {AdminId} retrieved {Count} users (page {Page})",
             User.FindFirst(ClaimTypes.NameIdentifier)?.Value, users.Count, page);
@@ -102,7 +123,7 @@ public class AdminController : ControllerBase
             pageSize,
             totalUsers,
             totalPages = (int)Math.Ceiling(totalUsers / (double)pageSize),
-            users
+            users = usersWithPermissions
         });
     }
 
@@ -141,8 +162,9 @@ public class AdminController : ControllerBase
                 i.LastAuthenticatedAt
             }),
             Tier = (int)user.Tier,
-            user.IsAdmin,
+            IsAdmin = user.IsAdministrator,
             user.IsActive,
+            Permissions = (int)user.Permissions,
             user.CreatedAt,
             user.LastLoginAt,
             apiKeys = user.ApiKeys.Select(k => new
@@ -200,12 +222,12 @@ public class AdminController : ControllerBase
             return NotFound(new { error = "User not found" });
         }
 
-        if (user.IsAdmin)
+        if (user.IsAdministrator)
         {
             return BadRequest(new { error = "User is already an admin" });
         }
 
-        user.IsAdmin = true;
+        user.Permissions = UserPermission.Administrator;
         await db.SaveChangesAsync();
 
         _logger.Warning("Admin {AdminId} granted admin status to user {UserId} ({Email})",
@@ -214,7 +236,7 @@ public class AdminController : ControllerBase
         return Ok(new
         {
             userId,
-            isAdmin = user.IsAdmin,
+            isAdmin = user.IsAdministrator,
             message = "Admin status granted successfully"
         });
     }
@@ -230,7 +252,7 @@ public class AdminController : ControllerBase
             return NotFound(new { error = "User not found" });
         }
 
-        if (!user.IsAdmin)
+        if (!user.IsAdministrator)
         {
             return BadRequest(new { error = "User is not an admin" });
         }
@@ -241,7 +263,7 @@ public class AdminController : ControllerBase
             return BadRequest(new { error = "Cannot revoke your own admin status" });
         }
 
-        user.IsAdmin = false;
+        user.Permissions = UserPermission.None;
         await db.SaveChangesAsync();
 
         _logger.Warning("Admin {AdminId} revoked admin status from user {UserId} ({Email})",
@@ -250,7 +272,7 @@ public class AdminController : ControllerBase
         return Ok(new
         {
             userId,
-            isAdmin = user.IsAdmin,
+            isAdmin = user.IsAdministrator,
             message = "Admin status revoked successfully"
         });
     }
@@ -262,7 +284,7 @@ public class AdminController : ControllerBase
         var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
         var totalUsers = await db.Set<User>().CountAsync();
         var activeUsers = await db.Set<User>().CountAsync(u => u.IsActive);
-        var adminUsers = await db.Set<User>().CountAsync(u => u.IsAdmin);
+        var adminUsers = await db.Set<User>().CountAsync(u => u.Permissions == UserPermission.Administrator);
 
         var usersByTier = await db.Set<User>()
             .GroupBy(u => u.Tier)
@@ -434,8 +456,8 @@ public class AdminController : ControllerBase
         catch (Exception ex)
         {
             _logger.Error(ex, "Error creating API key for user {UserId}", userId);
-            SentrySdk.CaptureException(ex, x => x.SetExtra("message", "Error creating API key"));
-            return StatusCode(500, new { error = "Failed to create API key", message = ex.Message });
+            SentrySdk.CaptureException(ex);
+            return StatusCode(500, new { error = "Failed to create API key" });
         }
     }
 
@@ -514,9 +536,37 @@ public class AdminController : ControllerBase
             scans
         });
     }
+
+    [HttpPatch("users/{userId:guid}/permissions")]
+    public async Task<IActionResult> UpdateUserPermissions(Guid userId, [FromBody] UpdatePermissionsRequest request)
+    {
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<FilesDbContext>();
+        var user = await db.Set<User>().FindAsync(userId);
+        if (user == null)
+        {
+            return NotFound(new { error = "User not found" });
+        }
+
+        var oldPermissions = user.Permissions;
+        user.Permissions = (UserPermission)request.Permissions;
+        await db.SaveChangesAsync();
+
+        _logger.Information("Admin {AdminId} updated user {UserId} permissions from {OldPermissions} to {NewPermissions}",
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value, userId, (int)oldPermissions, (int)user.Permissions);
+
+        return Ok(new
+        {
+            userId,
+            permissions = (int)user.Permissions,
+            message = "User permissions updated successfully"
+        });
+    }
 }
 
 public record UpdateTierRequest(TierType Tier);
+
+public record UpdatePermissionsRequest(int Permissions);
 
 public record CreateBotApiKeyRequest(
     string Name,

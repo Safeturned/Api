@@ -24,6 +24,9 @@ public static class FileConstants
 public static class KnownAuthPolicies
 {
     public const string AdminOnly = "AdminOnly";
+    public const string CanModerateFiles = "ModerateFiles";
+    public const string CanViewAuditLog = "ViewAuditLog";
+    public const string CanManageReports = "ManageReports";
 }
 
 public static class ClientConstants
