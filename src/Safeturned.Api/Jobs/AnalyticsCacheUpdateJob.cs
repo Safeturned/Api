@@ -1,3 +1,4 @@
+using Hangfire;
 using Hangfire.Console;
 using Hangfire.Server;
 using Safeturned.Api.Jobs.Helpers;
@@ -6,6 +7,7 @@ using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
+[Queue("critical")]
 public class AnalyticsCacheUpdateJob
 {
     private readonly IAnalyticsService _analyticsService;
@@ -15,6 +17,7 @@ public class AnalyticsCacheUpdateJob
         _analyticsService = analyticsService;
     }
 
+    [AutomaticRetry(Attempts = 2, DelaysInSeconds = [60, 300])]
     [SentryMonitorSlug("analytics-cache")]
     [SkipWhenPreviousJobIsRunning]
     public async Task UpdateAnalyticsCache(PerformContext context, CancellationToken cancellationToken)

@@ -1,3 +1,4 @@
+using Hangfire;
 using Hangfire.Console;
 using Hangfire.Server;
 using Safeturned.Api.Jobs.Helpers;
@@ -6,6 +7,7 @@ using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
+[Queue("critical")]
 public class AnalysisJobCleanupJob
 {
     private readonly IAnalysisJobService _analysisJobService;
@@ -15,6 +17,7 @@ public class AnalysisJobCleanupJob
         _analysisJobService = analysisJobService;
     }
 
+    [AutomaticRetry(Attempts = 2, DelaysInSeconds = [60, 300])]
     [SentryMonitorSlug("analysis-job-cleanup")]
     [SkipWhenPreviousJobIsRunning]
     public async Task CleanupExpiredJobsAsync(PerformContext context, CancellationToken cancellationToken = default)

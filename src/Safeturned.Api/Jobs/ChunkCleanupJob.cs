@@ -1,3 +1,4 @@
+using Hangfire;
 using Hangfire.Console;
 using Hangfire.Server;
 using Safeturned.Api.Jobs.Helpers;
@@ -6,6 +7,7 @@ using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
+[Queue("critical")]
 public class ChunkCleanupJob
 {
     private readonly IChunkStorageService _chunkStorageService;
@@ -15,6 +17,7 @@ public class ChunkCleanupJob
         _chunkStorageService = chunkStorageService;
     }
 
+    [AutomaticRetry(Attempts = 2, DelaysInSeconds = [60, 300])]
     [SentryMonitorSlug("chunk-cleanup")]
     [SkipWhenPreviousJobIsRunning]
     public async Task CleanupExpiredChunksAsync(PerformContext context, CancellationToken cancellationToken = default)

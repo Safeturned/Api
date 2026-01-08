@@ -167,9 +167,46 @@ services.AddHangfire(x => x
             PrepareSchemaIfNecessary = true,
             InvisibilityTimeout = TimeSpan.FromHours(7),
         }));
+
+var criticalWorkers = config.GetValue("Hangfire:Queues:Critical:Workers", 2);
+var cdPipelineWorkers = config.GetValue("Hangfire:Queues:CdPipeline:Workers", 3);
+var badgeAnalysisWorkers = config.GetValue("Hangfire:Queues:BadgeAnalysis:Workers", 2);
+var fileAnalysisWorkers = config.GetValue("Hangfire:Queues:FileAnalysis:Workers", 4);
+var defaultWorkers = config.GetValue("Hangfire:Queues:Default:Workers", 2);
+
 services.AddHangfireServer(options =>
 {
-    options.WorkerCount = config.GetValue("Hangfire:WorkerCount", 10);
+    options.ServerName = "critical-server";
+    options.WorkerCount = criticalWorkers;
+    options.Queues = new[] { "critical" };
+});
+
+services.AddHangfireServer(options =>
+{
+    options.ServerName = "cd-pipeline-server";
+    options.WorkerCount = cdPipelineWorkers;
+    options.Queues = new[] { "cd-pipeline" };
+});
+
+services.AddHangfireServer(options =>
+{
+    options.ServerName = "badge-analysis-server";
+    options.WorkerCount = badgeAnalysisWorkers;
+    options.Queues = new[] { "badge-analysis" };
+});
+
+services.AddHangfireServer(options =>
+{
+    options.ServerName = "file-analysis-server";
+    options.WorkerCount = fileAnalysisWorkers;
+    options.Queues = new[] { "file-analysis" };
+});
+
+services.AddHangfireServer(options =>
+{
+    options.ServerName = "default-server";
+    options.WorkerCount = defaultWorkers;
+    options.Queues = new[] { "default" };
 });
 
 var maxChunkSizeBytes = config.GetValue<int>("UploadLimits:MaxChunkSizeBytes");

@@ -1,3 +1,4 @@
+using Hangfire;
 using Hangfire.Console;
 using Hangfire.Server;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
+[Queue("critical")]
 public class RevokeAllApiKeysJob
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
@@ -16,6 +18,7 @@ public class RevokeAllApiKeysJob
         _serviceScopeFactory = serviceScopeFactory;
     }
 
+    [AutomaticRetry(Attempts = 2, DelaysInSeconds = [60, 300])]
     [SentryMonitorSlug("revoke-all-api-keys")]
     public async Task<int> RevokeAllApiKeysAsync(PerformContext context, CancellationToken cancellationToken = default)
     {

@@ -6,6 +6,7 @@ using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
+[Queue("file-analysis")]
 public class FileAnalysisJob
 {
     private readonly IAnalysisJobService _analysisJobService;

@@ -8,6 +8,7 @@ using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
+[Queue("cd-pipeline")]
 public class LoadersCdJob
 {
     private readonly ILoaderReleaseService _loaderReleaseService;
@@ -27,6 +28,7 @@ public class LoadersCdJob
         _logger = logger.ForContext<LoadersCdJob>();
     }
 
+    [AutomaticRetry(Attempts = 5, DelaysInSeconds = [30, 120, 300, 900, 1800])]
     [SentryMonitorSlug("loaders-cd")]
     public async Task ProcessAsync(PerformContext context, string repoName, string framework, string configuration, string version, string downloadUrl, string sha256, bool markLatest, string? assetName, CancellationToken ct)
     {

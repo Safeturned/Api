@@ -8,6 +8,7 @@ using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
+[Queue("cd-pipeline")]
 public class PluginInstallerCdJob
 {
     private readonly IPluginInstallerReleaseService _releaseService;
@@ -27,6 +28,7 @@ public class PluginInstallerCdJob
         _logger = logger.ForContext<PluginInstallerCdJob>();
     }
 
+    [AutomaticRetry(Attempts = 5, DelaysInSeconds = [30, 120, 300, 900, 1800])]
     [SentryMonitorSlug("plugininstaller-cd")]
     public async Task ProcessAsync(PerformContext context, string repoName, string framework, string version, string downloadUrl, string sha256, bool markLatest, string? assetName, CancellationToken ct)
     {

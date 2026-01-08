@@ -1,3 +1,4 @@
+using Hangfire;
 using Hangfire.Console;
 using Hangfire.Server;
 using Safeturned.Api.Services;
@@ -5,6 +6,7 @@ using Sentry.Hangfire;
 
 namespace Safeturned.Api.Jobs;
 
+[Queue("badge-analysis")]
 public class OfficialBadgeAnalysisJob
 {
     private readonly IOfficialBadgeService _officialBadgeService;
@@ -16,6 +18,7 @@ public class OfficialBadgeAnalysisJob
         _logger = logger.ForContext<OfficialBadgeAnalysisJob>();
     }
 
+    [AutomaticRetry(Attempts = 3, DelaysInSeconds = [10, 60, 300])]
     [SentryMonitorSlug("official-badge-analysis")]
     public async Task AnalyzeAsync(PerformContext context, string badgeId, string fileName, byte[] content, string version, CancellationToken ct)
     {
